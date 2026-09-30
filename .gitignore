@@ -1,0 +1,28 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Large/private datasets
+task1_llm/data/*
+task2_sentiment/data/*
+task3_gan/data/*
+
+# Local training artifacts; commit selected evidence separately if needed
+task1_llm/member_denisha/checkpoints/*
+task1_llm/member_denisha/outputs/*
+task2_sentiment/member_denisha/checkpoints/*
+task2_sentiment/member_denisha/outputs/*
+task3_gan/member_denisha/checkpoints/*
+task3_gan/member_denisha/outputs/*
+task3_gan/member_denisha/pred_A2B/*
+task3_gan/member_denisha/pred_B2A/*
+reproducibility/raw_logs/*
+reproducibility/manifests/*
+
+# OS/editor/archive files
+.DS_Store
+*.zip
+.ipynb_checkpoints/

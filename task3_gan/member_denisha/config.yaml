@@ -1,0 +1,13 @@
+seed: 20260929
+data_root: ../data
+image_size: 128
+batch_size: 1
+epochs: 20
+learning_rate: 0.0002
+beta1: 0.5
+beta2: 0.999
+lambda_cycle: 10.0
+lambda_identity: 5.0
+save_every: 5
+num_workers: 2
+device: auto

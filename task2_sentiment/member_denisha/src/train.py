@@ -1,0 +1,212 @@
+"""Train three from-scratch Yelp Polarity classifiers and write reproducible metrics.
+
+Expected input is CSV/JSONL with a text column and a binary label column. No
+pretrained embeddings or language models are used.
+Run from this directory: python src/train.py --config config.yaml
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import math
+import random
+import re
+import time
+from collections import Counter
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+from scipy.stats import chi2
+from sklearn.metrics import (accuracy_score, average_precision_score, brier_score_loss,
+                             confusion_matrix, f1_score, matthews_corrcoef, precision_score,
+                             recall_score, roc_auc_score)
+from sklearn.model_selection import train_test_split
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
+import yaml
+
+
+TOKEN_RE = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
+STOPWORDS = {"a", "an", "the", "and", "or", "but", "if", "then", "than", "to", "of", "in", "on", "for", "with", "as", "at", "by", "from", "is", "are", "was", "were", "be", "been", "it", "this", "that", "these", "those", "i", "we", "you", "he", "she", "they", "them", "our", "your", "their"}
+
+
+def stem_token(token):
+    # Lightweight deterministic stemming fallback; sentiment negations are retained.
+    for suffix in ("ingly", "edly", "ing", "ed", "ies", "es", "s"):
+        if len(token) > len(suffix) + 3 and token.endswith(suffix): return token[:-len(suffix)]
+    return token
+
+
+def seed_everything(seed):
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    if torch.cuda.is_available(): torch.cuda.manual_seed_all(seed)
+
+
+def device_from(value):
+    return torch.device("cuda" if value == "auto" and torch.cuda.is_available() else ("cpu" if value == "auto" else value))
+
+
+def normalize(text, remove_stopwords=True, stemming=True):
+    tokens = TOKEN_RE.findall(str(text).lower())
+    if remove_stopwords: tokens = [t for t in tokens if t not in STOPWORDS]
+    return [stem_token(t) for t in tokens] if stemming else tokens
+
+
+class Vocab:
+    def __init__(self, texts, max_size, remove_stopwords=True, stemming=True):
+        self.remove_stopwords, self.stemming = remove_stopwords, stemming
+        counts = Counter(tok for text in texts for tok in normalize(text, remove_stopwords, stemming))
+        self.itos = ["<pad>", "<unk>"] + [w for w, _ in counts.most_common(max_size - 2)]
+        self.stoi = {w: i for i, w in enumerate(self.itos)}
+
+    def encode(self, text, max_length):
+        ids = [self.stoi.get(w, 1) for w in normalize(text, self.remove_stopwords, self.stemming)][:max_length]
+        return ids + [0] * (max_length - len(ids))
+
+
+class ReviewDataset(Dataset):
+    def __init__(self, texts, labels, vocab, max_length):
+        self.x = torch.tensor([vocab.encode(x, max_length) for x in texts], dtype=torch.long)
+        self.y = torch.tensor(labels, dtype=torch.float32)
+        self.lengths = (self.x != 0).sum(1).clamp_min(1)
+
+    def __len__(self): return len(self.y)
+    def __getitem__(self, i): return self.x[i], self.y[i], self.lengths[i]
+
+
+class BoWMLP(nn.Module):
+    def __init__(self, vocab_size, dim, hidden, dropout):
+        super().__init__(); self.emb = nn.Embedding(vocab_size, dim, padding_idx=0)
+        self.net = nn.Sequential(nn.Linear(dim, hidden), nn.ReLU(), nn.Dropout(dropout), nn.Linear(hidden, 1))
+
+    def forward(self, x, lengths):
+        mask = (x != 0).unsqueeze(-1); pooled = (self.emb(x) * mask).sum(1) / lengths.unsqueeze(-1).float(); return self.net(pooled).squeeze(-1)
+
+
+class TextCNN(nn.Module):
+    def __init__(self, vocab_size, dim, channels, kernels, dropout):
+        super().__init__(); self.emb = nn.Embedding(vocab_size, dim, padding_idx=0)
+        self.convs = nn.ModuleList([nn.Conv1d(dim, channels, k) for k in kernels]); self.drop = nn.Dropout(dropout); self.fc = nn.Linear(channels * len(kernels), 1)
+
+    def forward(self, x, lengths):
+        h = self.emb(x).transpose(1, 2); pooled = [torch.relu(c(h)).amax(-1) for c in self.convs]; return self.fc(self.drop(torch.cat(pooled, 1))).squeeze(-1)
+
+
+class GRUClassifier(nn.Module):
+    def __init__(self, vocab_size, dim, hidden, layers, dropout):
+        super().__init__(); self.emb = nn.Embedding(vocab_size, dim, padding_idx=0)
+        self.gru = nn.GRU(dim, hidden, layers, batch_first=True, dropout=dropout if layers > 1 else 0.0, bidirectional=True); self.fc = nn.Linear(hidden * 2, 1)
+
+    def forward(self, x, lengths):
+        h, _ = self.gru(self.emb(x)); idx = (lengths - 1).view(-1, 1, 1).expand(-1, 1, h.size(-1)); return self.fc(h.gather(1, idx).squeeze(1)).squeeze(-1)
+
+
+def build_model(name, cfg, vocab_size):
+    c = cfg["models"][name]
+    if c["type"] == "bow_mlp": return BoWMLP(vocab_size, c["embedding_dim"], c["hidden_dim"], c["dropout"])
+    if c["type"] == "text_cnn": return TextCNN(vocab_size, c["embedding_dim"], c["channels"], c["kernel_sizes"], c["dropout"])
+    if c["type"] == "gru": return GRUClassifier(vocab_size, c["embedding_dim"], c["hidden_dim"], c["layers"], c["dropout"])
+    raise ValueError(f"Unknown model type: {c['type']}")
+
+
+def expected_calibration_error(y, p, bins=10):
+    edges = np.linspace(0, 1, bins + 1); total = 0.0
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (p >= lo) & (p <= hi if hi == 1 else p < hi)
+        if m.any(): total += m.mean() * abs(p[m].mean() - y[m].mean())
+    return float(total)
+
+
+def bootstrap_ci(y, p, metric, iterations=1000, seed=0):
+    rng = np.random.default_rng(seed); vals = []
+    for _ in range(iterations):
+        idx = rng.integers(0, len(y), len(y)); vals.append(metric(y[idx], p[idx]))
+    return [float(np.percentile(vals, 2.5)), float(np.percentile(vals, 97.5))]
+
+
+def mcnemar(y, pred_a, pred_b):
+    b = int(((pred_a == y) & (pred_b != y)).sum()); c = int(((pred_a != y) & (pred_b == y)).sum())
+    stat = (abs(b - c) - 1) ** 2 / max(b + c, 1); return {"b": b, "c": c, "chi2": float(stat), "p_value": float(chi2.sf(stat, 1))}
+
+
+def metrics(y, p, slices):
+    pred = (p >= 0.5).astype(int); cm = confusion_matrix(y, pred, labels=[0, 1]).tolist()
+    out = {
+        "accuracy": float(accuracy_score(y, pred)), "precision_macro": float(precision_score(y, pred, average="macro", zero_division=0)),
+        "recall_macro": float(recall_score(y, pred, average="macro", zero_division=0)), "f1_macro": float(f1_score(y, pred, average="macro", zero_division=0)),
+        "precision_micro": float(precision_score(y, pred, average="micro", zero_division=0)), "recall_micro": float(recall_score(y, pred, average="micro", zero_division=0)),
+        "f1_micro": float(f1_score(y, pred, average="micro", zero_division=0)), "precision_weighted": float(precision_score(y, pred, average="weighted", zero_division=0)),
+        "recall_weighted": float(recall_score(y, pred, average="weighted", zero_division=0)), "f1_weighted": float(f1_score(y, pred, average="weighted", zero_division=0)),
+        "roc_auc": float(roc_auc_score(y, p)), "pr_auc": float(average_precision_score(y, p)), "mcc": float(matthews_corrcoef(y, pred)),
+        "brier_score": float(brier_score_loss(y, p)), "expected_calibration_error": expected_calibration_error(y, p), "confusion_matrix": cm,
+        "accuracy_ci95": bootstrap_ci(y, p, lambda a, q: accuracy_score(a, q >= .5)),
+        "macro_f1_ci95": bootstrap_ci(y, p, lambda a, q: f1_score(a, q >= .5, average="macro", zero_division=0)),
+        "mcc_ci95": bootstrap_ci(y, p, lambda a, q: matthews_corrcoef(a, q >= .5)),
+    }
+    out["slice_metrics"] = {}
+    for name, mask in slices.items():
+        if mask.sum() >= 2: out["slice_metrics"][name] = {"n": int(mask.sum()), "macro_f1": float(f1_score(y[mask], pred[mask], average="macro", zero_division=0)), "error_rate": float((pred[mask] != y[mask]).mean())}
+    return out
+
+
+def load_frame(path):
+    if path.endswith(".jsonl"):
+        return pd.DataFrame([json.loads(x) for x in Path(path).read_text().splitlines() if x.strip()])
+    return pd.read_csv(path)
+
+
+def main():
+    ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); args = ap.parse_args(); cfg = yaml.safe_load(Path(args.config).read_text()); seed_everything(cfg["seed"])
+    root = Path.cwd(); out = root / "outputs"; ckpt = root / "checkpoints"; out.mkdir(exist_ok=True); ckpt.mkdir(exist_ok=True)
+    df = load_frame(cfg["data_path"]); text_col = next((c for c in ["text", "review", "content"] if c in df), None); label_col = next((c for c in ["label", "sentiment", "target"] if c in df), None)
+    if text_col is None or label_col is None: raise ValueError("Dataset needs a text/review/content column and label/sentiment/target column")
+    df = df[[text_col, label_col]].dropna(); df[text_col] = df[text_col].astype(str); df[label_col] = df[label_col].astype(int)
+    # Accommodate Yelp labels encoded as 1/2 as well as 0/1.
+    if set(df[label_col].unique()) == {1, 2}: df[label_col] -= 1
+    train, test = train_test_split(df, test_size=0.2, random_state=cfg["seed"], stratify=df[label_col]); train, val = train_test_split(train, test_size=cfg["validation_fraction"], random_state=cfg["seed"], stratify=train[label_col])
+    vocab = Vocab(train[text_col].tolist(), cfg["max_vocab_size"], cfg.get("remove_stopwords", True), cfg.get("stemming", True)); device = device_from(cfg["device"]); results = {}; all_preds = {}
+    slices = {"short": test[text_col].str.split().str.len().to_numpy() < 50, "medium": ((test[text_col].str.split().str.len().to_numpy() >= 50) & (test[text_col].str.split().str.len().to_numpy() < 150)), "long": test[text_col].str.split().str.len().to_numpy() >= 150}
+    train_ds = ReviewDataset(train[text_col].tolist(), train[label_col].to_numpy(), vocab, cfg["max_length"]); val_ds = ReviewDataset(val[text_col].tolist(), val[label_col].to_numpy(), vocab, cfg["max_length"]); test_ds = ReviewDataset(test[text_col].tolist(), test[label_col].to_numpy(), vocab, cfg["max_length"])
+    y_test = test[label_col].to_numpy(); base_pred = None
+    for name in cfg["models"]:
+        model = build_model(name, cfg, len(vocab.itos)).to(device); opt = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"]); loss_fn = nn.BCEWithLogitsLoss(); loader = DataLoader(train_ds, cfg["batch_size"], shuffle=True); start = time.time(); rows = []; nan_count = 0
+        if device.type == "cuda": torch.cuda.reset_peak_memory_stats(device)
+        for epoch in range(1, cfg["epochs"] + 1):
+            model.train(); total = 0.0
+            for x, y, lengths in loader:
+                x, y, lengths = x.to(device), y.to(device), lengths.to(device); opt.zero_grad(set_to_none=True); loss = loss_fn(model(x, lengths), y); nan_count += int(not torch.isfinite(loss).item()); loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step(); total += loss.item()
+            rows.append({"epoch": epoch, "train_loss": total / max(1, len(loader))}); print(json.dumps({"model": name, **rows[-1]}), flush=True)
+        model.eval(); probs = []
+        with torch.no_grad():
+            for x, _, lengths in DataLoader(test_ds, cfg["batch_size"]): probs.extend(torch.sigmoid(model(x.to(device), lengths.to(device))).cpu().numpy())
+        probs = np.asarray(probs); all_preds[name] = probs; elapsed = time.time() - start; results[name] = metrics(y_test, probs, slices); results[name].update({"parameter_count": sum(p.numel() for p in model.parameters()), "training_time_seconds": elapsed, "examples_per_second": len(train_ds) * cfg["epochs"] / max(elapsed, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "gradient_nan_count": nan_count, "device": str(device), "history": rows})
+        torch.save({"model": model.state_dict(), "vocab": vocab.stoi, "config": cfg}, ckpt / f"{name}.pt")
+        (out / f"{name}_history.json").write_text(json.dumps(rows, indent=2))
+        if base_pred is None: base_pred = (probs >= .5).astype(int)
+    for name, probs in all_preds.items():
+        pred = (probs >= .5).astype(int); results[name]["mcnemar_vs_baseline"] = None if name == next(iter(all_preds)) else mcnemar(y_test, base_pred, pred)
+    error_rows = []
+    for i, (text, y) in enumerate(zip(test[text_col], y_test)):
+        p = all_preds[next(iter(all_preds))][i]; pred = int(p >= .5); confidence = abs(p - .5); typ = "false_positive" if pred == 1 and y == 0 else "false_negative" if pred == 0 and y == 1 else "correct"
+        if typ != "correct":
+            length = len(str(text).split()); bucket = "short" if length < 50 else "medium" if length < 150 else "long"
+            error_rows.append({"index": int(test.index[i]), "text": text, "label": int(y), "prediction": pred, "probability": float(p), "error_type": typ, "confidence": float(confidence), "slice": bucket})
+    fp = sorted([r for r in error_rows if r["error_type"] == "false_positive"], key=lambda r: -r["confidence"])
+    fn = sorted([r for r in error_rows if r["error_type"] == "false_negative"], key=lambda r: -r["confidence"])
+    near = sorted(error_rows, key=lambda r: abs(r["probability"] - .5)); slice_rows = []
+    for slice_name in ["short", "medium", "long"]:
+        slice_rows.extend(sorted([r for r in error_rows if r["slice"] == slice_name], key=lambda r: -r["confidence"])[:2])
+    selected = []; used = set()
+    def add(rows, bucket, limit):
+        for row in rows:
+            if len([x for x in selected if x["review_bucket"] == bucket]) >= limit: break
+            if row["index"] not in used: row = {**row, "review_bucket": bucket}; selected.append(row); used.add(row["index"])
+    add(fp, "confident_false_positive", 5); add(fn, "confident_false_negative", 5); add(near, "near_threshold", 5); add(slice_rows, "slice_specific", 5)
+    (out / "error_review.json").write_text(json.dumps(selected, indent=2))
+    (out / "metrics.json").write_text(json.dumps(results, indent=2)); (out / "metrics_summary.csv").write_text(pd.DataFrame([{ "model": k, **{m: v for m, v in val.items() if isinstance(v, (int, float))}} for k, val in results.items()]).to_csv(index=False)); print(json.dumps(results, indent=2))
+
+
+if __name__ == "__main__": main()

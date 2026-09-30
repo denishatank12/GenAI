@@ -1,0 +1,13 @@
+{
+  "student": "Denisha Ketan Tank",
+  "task": "REPLACE",
+  "command": "REPLACE",
+  "git_revision": "REPLACE",
+  "dataset_name_and_version": "REPLACE",
+  "dataset_path": "REPLACE",
+  "python_version": "REPLACE",
+  "package_versions": {},
+  "hardware": "REPLACE",
+  "checkpoint_to_result_mapping": {},
+  "notes": "Keep the associated raw log untouched."
+}
