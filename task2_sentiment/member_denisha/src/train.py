@@ -181,8 +181,8 @@ def load_frame(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); args = ap.parse_args(); cfg = yaml.safe_load(Path(args.config).read_text()); seed_everything(cfg["seed"])
-    root = Path.cwd(); out = root / "outputs"; ckpt = root / "checkpoints"; out.mkdir(exist_ok=True); ckpt.mkdir(exist_ok=True)
+    ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); ap.add_argument("--checkpoint-dir", default=None); ap.add_argument("--resume-latest", action="store_true"); args = ap.parse_args(); cfg = yaml.safe_load(Path(args.config).read_text()); seed_everything(cfg["seed"])
+    root = Path.cwd(); out = root / "outputs"; ckpt = Path(args.checkpoint_dir or cfg.get("checkpoint_dir", "checkpoints")); ckpt = ckpt if ckpt.is_absolute() else root / ckpt; out.mkdir(exist_ok=True); ckpt.mkdir(parents=True, exist_ok=True)
     df = load_frame(cfg["data_path"]); text_col = next((c for c in ["text", "review", "content"] if c in df), None); label_col = next((c for c in ["label", "sentiment", "target"] if c in df), None)
     if text_col is None or label_col is None: raise ValueError("Dataset needs a text/review/content column and label/sentiment/target column")
     df = df[[text_col, label_col]].dropna(); df[text_col] = df[text_col].astype(str); df[label_col] = df[label_col].astype(int)
@@ -210,11 +210,17 @@ def main():
         opt = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=cfg.get("lr_factor", 0.5), patience=cfg.get("lr_patience", 1), min_lr=cfg.get("min_learning_rate", 1e-6))
         loss_fn = nn.BCEWithLogitsLoss(); loader = DataLoader(train_ds, cfg["batch_size"], shuffle=True, **loader_kwargs); val_loader = DataLoader(val_ds, cfg["batch_size"], shuffle=False, **eval_loader_kwargs); test_loader = DataLoader(test_ds, cfg["batch_size"], shuffle=False, **eval_loader_kwargs)
-        start = time.time(); rows = []; nan_count = 0; best_val = float("inf"); best_state = None; stale_epochs = 0
+        start = time.time(); rows = []; nan_count = 0; best_val = float("inf"); best_state = None; stale_epochs = 0; start_epoch = 1
         use_scaler = device.type == "cuda" and cfg.get("amp", True) and cfg.get("precision", "bfloat16") == "float16"
         scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
         if device.type == "cuda": torch.cuda.reset_peak_memory_stats(device)
-        for epoch in range(1, cfg["epochs"] + 1):
+        latest = ckpt / f"{name}_latest.pt"
+        if args.resume_latest and latest.exists():
+            state = torch.load(latest, map_location=device); model.load_state_dict(state["model"]); opt.load_state_dict(state["optimizer"]); scheduler.load_state_dict(state["scheduler"])
+            rows = state.get("history", []); best_val = float(state.get("best_validation_loss", float("inf"))); best_state = state.get("best_model"); start_epoch = int(state.get("epoch", 0)) + 1
+            if best_state is not None: best_state = {k: v.cpu() for k, v in best_state.items()}
+            print(json.dumps({"model": name, "resumed_from": str(latest), "start_epoch": start_epoch}), flush=True)
+        for epoch in range(start_epoch, cfg["epochs"] + 1):
             model.train(); total = 0.0
             for x, y, lengths in loader:
                 x, y, lengths = x.to(device, non_blocking=True), y.to(device, non_blocking=True), lengths.to(device, non_blocking=True); opt.zero_grad(set_to_none=True)
@@ -229,6 +235,7 @@ def main():
             if val_loss < best_val - cfg.get("min_delta", 1e-4): best_val = val_loss; best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}; stale_epochs = 0
             else: stale_epochs += 1
             rows.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss, "learning_rate": current_lr}); print(json.dumps({"model": name, **rows[-1]}), flush=True)
+            torch.save({"model": model.state_dict(), "optimizer": opt.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch, "history": rows, "best_validation_loss": best_val, "best_model": best_state, "config": cfg, "vocab": vocab.stoi}, latest)
             if stale_epochs >= cfg.get("early_stopping_patience", 3): print(json.dumps({"model": name, "early_stopping": True, "epoch": epoch}), flush=True); break
         if best_state is not None: model.load_state_dict(best_state)
         _, _, probs = evaluate_loader(model, test_loader, loss_fn, device, cfg, return_probs=True)

@@ -155,8 +155,8 @@ def export_predictions(generator_ab, generator_ba, root_a, root_b, cfg, device, 
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); args = ap.parse_args(); cfg = yaml.safe_load(Path(args.config).read_text()); seed_everything(cfg["seed"])
-    out, ckpt = Path.cwd() / "outputs", Path.cwd() / "checkpoints"; out.mkdir(exist_ok=True); ckpt.mkdir(exist_ok=True)
+    ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); ap.add_argument("--checkpoint-dir", default=None); ap.add_argument("--resume-latest", action="store_true"); args = ap.parse_args(); cfg = yaml.safe_load(Path(args.config).read_text()); seed_everything(cfg["seed"])
+    root = Path.cwd(); out = root / "outputs"; ckpt = Path(args.checkpoint_dir or cfg.get("checkpoint_dir", "checkpoints")); ckpt = ckpt if ckpt.is_absolute() else root / ckpt; out.mkdir(exist_ok=True); ckpt.mkdir(parents=True, exist_ok=True)
     data_root = Path(cfg["data_root"]); root_a = next((p for p in [data_root / "monet_jpg", data_root / "monet", data_root / "A"] if p.exists()), None); root_b = next((p for p in [data_root / "photo_jpg", data_root / "photo", data_root / "B"] if p.exists()), None)
     if root_a is None or root_b is None: raise FileNotFoundError("Expected Monet and photo folders under data_root")
     device = device_from(cfg["device"]); torch.set_float32_matmul_precision("high")
@@ -164,9 +164,14 @@ def main():
     loader_a, loader_b = make_loader(root_a, cfg, device, True), make_loader(root_b, cfg, device, True); iter_b = iter(loader_b)
     G_AB, G_BA, D_A, D_B = Generator(cfg.get("residual_blocks", 9)).to(device), Generator(cfg.get("residual_blocks", 9)).to(device), PatchDiscriminator().to(device), PatchDiscriminator().to(device)
     opt_g = torch.optim.Adam(list(G_AB.parameters()) + list(G_BA.parameters()), lr=cfg["learning_rate"], betas=(cfg["beta1"], cfg["beta2"])); opt_da = torch.optim.Adam(D_A.parameters(), lr=cfg["learning_rate"], betas=(cfg["beta1"], cfg["beta2"])); opt_db = torch.optim.Adam(D_B.parameters(), lr=cfg["learning_rate"], betas=(cfg["beta1"], cfg["beta2"]))
-    schedulers = [torch.optim.lr_scheduler.LambdaLR(opt, lambda epoch: linear_decay(epoch, cfg["epochs"], cfg["decay_start_epoch"])) for opt in [opt_g, opt_da, opt_db]]; scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda" and cfg.get("amp", True) and cfg.get("precision", "bfloat16").lower() == "float16")); adv, cycle, identity = nn.MSELoss(), nn.L1Loss(), nn.L1Loss(); buffer_a, buffer_b = ReplayBuffer(cfg.get("replay_buffer_size", 50)), ReplayBuffer(cfg.get("replay_buffer_size", 50)); history, grad_norms, nan_count, images_seen, start = [], [], 0, 0, time.time()
+    schedulers = [torch.optim.lr_scheduler.LambdaLR(opt, lambda epoch: linear_decay(epoch, cfg["epochs"], cfg["decay_start_epoch"])) for opt in [opt_g, opt_da, opt_db]]; scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda" and cfg.get("amp", True) and cfg.get("precision", "bfloat16").lower() == "float16")); adv, cycle, identity = nn.MSELoss(), nn.L1Loss(), nn.L1Loss(); buffer_a, buffer_b = ReplayBuffer(cfg.get("replay_buffer_size", 50)), ReplayBuffer(cfg.get("replay_buffer_size", 50)); history, grad_norms, nan_count, images_seen, start = [], [], 0, 0, time.time(); start_epoch = 1
+    latest = ckpt / "cyclegan_latest.pt"
+    if args.resume_latest and latest.exists():
+        state = torch.load(latest, map_location=device); G_AB.load_state_dict(state["G_AB"]); G_BA.load_state_dict(state["G_BA"]); D_A.load_state_dict(state["D_A"]); D_B.load_state_dict(state["D_B"]); opt_g.load_state_dict(state["opt_g"]); opt_da.load_state_dict(state["opt_da"]); opt_db.load_state_dict(state["opt_db"])
+        for scheduler, saved in zip(schedulers, state.get("schedulers", [])): scheduler.load_state_dict(saved)
+        history = state.get("history", []); start_epoch = int(state.get("epoch", 0)) + 1; print(json.dumps({"resumed_from": str(latest), "start_epoch": start_epoch}), flush=True)
     print(json.dumps({"device": str(device), "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU", "domain_A": str(root_a), "domain_B": str(root_b), "image_size": cfg["image_size"], "epochs": cfg["epochs"], "batches_per_epoch": len(loader_a), "amp": cfg.get("amp", True), "precision": cfg.get("precision", "bfloat16")}), flush=True)
-    for epoch in range(1, cfg["epochs"] + 1):
+    for epoch in range(start_epoch, cfg["epochs"] + 1):
         sums, batches = {"g": 0., "d_a": 0., "d_b": 0., "cycle": 0., "identity": 0.}, 0
         for batch_index, (real_a, _) in enumerate(loader_a, 1):
             try: real_b, _ = next(iter_b)
@@ -190,7 +195,9 @@ def main():
             if batch_index % cfg.get("log_interval_batches", 250) == 0: print(json.dumps({"epoch": epoch, "batch": batch_index, "batches_per_epoch": len(loader_a), "g_loss": loss_g.item(), "lr": opt_g.param_groups[0]["lr"]}), flush=True)
         for scheduler in schedulers: scheduler.step()
         row = {"epoch": epoch, **{key: value / max(1, batches) for key, value in sums.items()}, "lr": opt_g.param_groups[0]["lr"], "elapsed_seconds": time.time() - start}; history.append(row); (out / "history.json").write_text(json.dumps(history, indent=2)); print(json.dumps(row), flush=True)
-        if epoch == 1 or epoch % cfg["save_every"] == 0 or epoch == cfg["epochs"]: torch.save({"G_AB": G_AB.state_dict(), "G_BA": G_BA.state_dict(), "D_A": D_A.state_dict(), "D_B": D_B.state_dict(), "opt_g": opt_g.state_dict(), "opt_da": opt_da.state_dict(), "opt_db": opt_db.state_dict(), "epoch": epoch, "config": cfg, "history": history}, ckpt / f"cyclegan_epoch_{epoch:03d}.pt")
+        checkpoint = {"G_AB": G_AB.state_dict(), "G_BA": G_BA.state_dict(), "D_A": D_A.state_dict(), "D_B": D_B.state_dict(), "opt_g": opt_g.state_dict(), "opt_da": opt_da.state_dict(), "opt_db": opt_db.state_dict(), "schedulers": [scheduler.state_dict() for scheduler in schedulers], "epoch": epoch, "config": cfg, "history": history}
+        torch.save(checkpoint, latest)
+        if epoch == 1 or epoch % cfg["save_every"] == 0 or epoch == cfg["epochs"]: torch.save(checkpoint, ckpt / f"cyclegan_epoch_{epoch:03d}.pt")
     cycle_metrics, audit_rows = export_predictions(G_AB, G_BA, root_a, root_b, cfg, device, out); elapsed = time.time() - start; metrics = {**cycle_metrics, "generator_gradient_norm_mean": float(np.mean(grad_norms)), "generator_gradient_norm_max": float(np.max(grad_norms)), "gradient_nan_count": nan_count, "parameter_count_generators": sum(p.numel() for p in list(G_AB.parameters()) + list(G_BA.parameters())), "parameter_count_discriminators": sum(p.numel() for p in list(D_A.parameters()) + list(D_B.parameters())), "training_time_seconds": elapsed, "images_per_second": images_seen / max(elapsed, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "device": str(device), "fid_kid_precision_recall": "run evaluate_metrics.py for both directions", "lpips": "run evaluate_lpips.py for both reconstruction folders", "kaggle_submission": str(out / cfg.get("submission_zip", "images.zip")), "human_audit": "complete human_audit.csv"}; (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
     with (out / "human_audit.csv").open("w", newline="") as stream: writer = csv.DictWriter(stream, fieldnames=audit_rows[0].keys() if audit_rows else ["sample_id"]); writer.writeheader(); writer.writerows(audit_rows)
     print(json.dumps(metrics, indent=2))
