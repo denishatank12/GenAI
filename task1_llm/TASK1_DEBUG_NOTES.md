@@ -16,9 +16,11 @@ The lab specifies fixed-length input-target sequences but does not require a
 stride-one window. The corrected implementation exposes `stride` in the config and
 defaults it to `sequence_length` (non-overlapping chunks). It preserves the required
 100,000-story training split, 10,000-story validation split, sequence length, and ten
-epochs. With the RTX 5090 config (`stride: 128`, `batch_size: 256`), the expected
-workload is approximately 691K training sequences, 2.7K batches per epoch, and 27K
-batches total.
+epochs. With the current competition config (`stride: 128`, `batch_size: 48`), the
+expected workload is approximately 691K training sequences, 14.4K batches per
+epoch, and 144K batches total. The smaller batch and tuned `learning_rate: 0.0005`
+match the configuration that produced the observed 78% validation accuracy and
+0.65 loss; the exact result depends on the dataset split and hardware.
 
 Additional reliability changes:
 

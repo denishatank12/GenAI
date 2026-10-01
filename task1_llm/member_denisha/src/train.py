@@ -193,9 +193,9 @@ def main():
     print(json.dumps({"device": str(choose_device(cfg["device"])), "train_stories": len(train_stories), "validation_stories": len(val_stories), "train_characters": len(train_data), "validation_characters": len(val_data), "stride": stride, "train_sequences": len(train_dataset), "validation_sequences": len(val_dataset), "batches_per_epoch": len(train_loader), "total_training_batches": len(train_loader) * cfg["epochs"]}), flush=True)
     model = GPTFromScratch(len(chars), cfg).to(device)
     if device.type == "cuda": torch.cuda.reset_peak_memory_stats(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"], betas=tuple(cfg.get("betas", [0.9, 0.999])))
     total_steps = cfg["epochs"] * max(1, len(train_loader)); warmup = cfg["warmup_steps"]; train_tokens = 0; nan_count = 0
-    def lr_lambda(step): return min((step + 1) / max(1, warmup), 1.0) * max(0.1, 0.5 * (1 + math.cos(math.pi * step / max(1, total_steps))))
+    def lr_lambda(step): return min((step + 1) / max(1, warmup), 1.0) * max(cfg.get("min_lr_ratio", 0.1), 0.5 * (1 + math.cos(math.pi * step / max(1, total_steps))))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda); history = []; start = time.time(); step = 0
     use_scaler = device.type == "cuda" and cfg.get("amp", True) and cfg.get("precision", "bfloat16").lower() == "float16"
     scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
