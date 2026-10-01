@@ -160,9 +160,12 @@ def load_stories(path: Path):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); args = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); ap.add_argument("--checkpoint-dir", default=None); ap.add_argument("--resume-latest", action="store_true"); args = ap.parse_args()
     cfg = yaml.safe_load(Path(args.config).read_text()); seed_everything(cfg["seed"])
-    root = Path.cwd(); out = root / "outputs"; ckpt = root / "checkpoints"; out.mkdir(exist_ok=True); ckpt.mkdir(exist_ok=True)
+    root = Path.cwd(); out = root / "outputs"; ckpt = Path(args.checkpoint_dir or cfg.get("checkpoint_dir", "checkpoints")); ckpt = ckpt if ckpt.is_absolute() else root / ckpt; out.mkdir(exist_ok=True); ckpt.mkdir(parents=True, exist_ok=True)
+    if args.resume_latest and not cfg.get("resume_from"):
+        latest = ckpt / "gpt_from_scratch_latest.pt"
+        if latest.exists(): cfg["resume_from"] = str(latest)
     stories = load_stories(Path(cfg["data_path"]))
     required_stories = cfg["train_samples"] + cfg["validation_samples"]
     if len(stories) < required_stories:
@@ -206,7 +209,7 @@ def main():
         history = state.get("history", []); step = int(state.get("step", 0)); start_epoch = int(state.get("epoch", 0)) + 1
         print(json.dumps({"resumed_from": cfg["resume_from"], "start_epoch": start_epoch}), flush=True)
     for epoch in range(start_epoch, cfg["epochs"] + 1):
-        model.train(); train_loss = 0.0; batches = 0
+        model.train(); train_loss = 0.0; batches = 0; grad_norm = 0.0
         for x, y in train_loader:
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True); optimizer.zero_grad(set_to_none=True)
             with autocast_context(device, cfg): _, loss = model(x, y)
@@ -217,6 +220,10 @@ def main():
                 loss.backward(); grad_norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["gradient_clip_norm"])); optimizer.step()
             scheduler.step(); step += 1
             train_loss += loss.item(); batches += 1; train_tokens += int(y.numel())
+            checkpoint_every = int(cfg.get("checkpoint_every_batches", 0))
+            if checkpoint_every > 0 and batches % checkpoint_every == 0:
+                torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch, "step": step, "history": history, "config": cfg, "vocab": c2i}, ckpt / "gpt_from_scratch_latest.pt")
+                print(json.dumps({"checkpoint": str(ckpt / "gpt_from_scratch_latest.pt"), "epoch": epoch, "batch": batches}), flush=True)
             if batches % cfg.get("log_interval_batches", 250) == 0:
                 print(json.dumps({"epoch": epoch, "batch": batches, "batches_per_epoch": len(train_loader), "loss": loss.item(), "lr": optimizer.param_groups[0]["lr"]}), flush=True)
         train_loss /= max(1, batches); val_loss, val_acc = evaluate(model, val_loader, device, cfg)
@@ -225,6 +232,7 @@ def main():
         (out / "history.json").write_text(json.dumps(history, indent=2))
         if cfg.get("save_every_epoch", True):
             torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch, "step": step, "history": history, "config": cfg, "vocab": c2i}, ckpt / f"gpt_from_scratch_epoch_{epoch:03d}.pt")
+            torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch, "step": step, "history": history, "config": cfg, "vocab": c2i}, ckpt / "gpt_from_scratch_latest.pt")
     elapsed = time.time() - start; val_ppl = math.exp(min(20, history[-1]["val_loss"]))
     prompt_text = train_stories[0][:min(24, len(train_stories[0]))]
     prompt_ids = torch.tensor([[c2i[c] for c in prompt_text]], device=device)

@@ -21,6 +21,7 @@ gradient_clip_norm: 1.0
 num_workers: 0
 log_interval_batches: 50
 save_every_epoch: true
+checkpoint_every_batches: 500
 amp: true
 precision: bfloat16
 pin_memory: true
