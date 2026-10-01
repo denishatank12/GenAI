@@ -14,6 +14,7 @@ import random
 import re
 import time
 from collections import Counter
+from contextlib import nullcontext
 from pathlib import Path
 
 import numpy as np
@@ -47,6 +48,27 @@ def seed_everything(seed):
 
 def device_from(value):
     return torch.device("cuda" if value == "auto" and torch.cuda.is_available() else ("cpu" if value == "auto" else value))
+
+
+def autocast_context(device, cfg):
+    if device.type != "cuda" or not cfg.get("amp", True):
+        return nullcontext()
+    dtype = torch.bfloat16 if cfg.get("precision", "bfloat16") == "bfloat16" else torch.float16
+    return torch.autocast(device_type="cuda", dtype=dtype)
+
+
+def evaluate_loader(model, loader, loss_fn, device, cfg, return_probs=False):
+    model.eval(); total_loss = 0.0; total = 0; probs = []; labels = []
+    with torch.no_grad():
+        for x, y, lengths in loader:
+            x = x.to(device, non_blocking=True); y = y.to(device, non_blocking=True); lengths = lengths.to(device, non_blocking=True)
+            with autocast_context(device, cfg):
+                logits = model(x, lengths); loss = loss_fn(logits, y)
+            total_loss += loss.item() * len(y); total += len(y)
+            if return_probs:
+                probs.extend(torch.sigmoid(logits).float().cpu().numpy()); labels.extend(y.cpu().numpy())
+    if return_probs: return total_loss / max(total, 1), np.asarray(labels), np.asarray(probs)
+    return total_loss / max(total, 1)
 
 
 def normalize(text, remove_stopwords=True, stemming=True):
@@ -170,20 +192,48 @@ def main():
     vocab = Vocab(train[text_col].tolist(), cfg["max_vocab_size"], cfg.get("remove_stopwords", True), cfg.get("stemming", True)); device = device_from(cfg["device"]); results = {}; all_preds = {}
     slices = {"short": test[text_col].str.split().str.len().to_numpy() < 50, "medium": ((test[text_col].str.split().str.len().to_numpy() >= 50) & (test[text_col].str.split().str.len().to_numpy() < 150)), "long": test[text_col].str.split().str.len().to_numpy() >= 150}
     train_ds = ReviewDataset(train[text_col].tolist(), train[label_col].to_numpy(), vocab, cfg["max_length"]); val_ds = ReviewDataset(val[text_col].tolist(), val[label_col].to_numpy(), vocab, cfg["max_length"]); test_ds = ReviewDataset(test[text_col].tolist(), test[label_col].to_numpy(), vocab, cfg["max_length"])
+    if device.type == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+    loader_kwargs = {"pin_memory": bool(device.type == "cuda" and cfg.get("pin_memory", True))}
+    if cfg.get("num_workers", 0) > 0:
+        loader_kwargs.update(num_workers=cfg["num_workers"], persistent_workers=True, prefetch_factor=cfg.get("prefetch_factor", 4))
+    eval_loader_kwargs = dict(loader_kwargs)
+    eval_loader_kwargs["num_workers"] = cfg.get("eval_workers", max(0, cfg.get("num_workers", 0)))
+    if eval_loader_kwargs["num_workers"] == 0:
+        eval_loader_kwargs.pop("persistent_workers", None); eval_loader_kwargs.pop("prefetch_factor", None)
     y_test = test[label_col].to_numpy(); base_pred = None
     for name in cfg["models"]:
-        model = build_model(name, cfg, len(vocab.itos)).to(device); opt = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"]); loss_fn = nn.BCEWithLogitsLoss(); loader = DataLoader(train_ds, cfg["batch_size"], shuffle=True); start = time.time(); rows = []; nan_count = 0
+        model = build_model(name, cfg, len(vocab.itos)).to(device)
+        opt = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"])
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=cfg.get("lr_factor", 0.5), patience=cfg.get("lr_patience", 1), min_lr=cfg.get("min_learning_rate", 1e-6))
+        loss_fn = nn.BCEWithLogitsLoss(); loader = DataLoader(train_ds, cfg["batch_size"], shuffle=True, **loader_kwargs); val_loader = DataLoader(val_ds, cfg["batch_size"], shuffle=False, **eval_loader_kwargs); test_loader = DataLoader(test_ds, cfg["batch_size"], shuffle=False, **eval_loader_kwargs)
+        start = time.time(); rows = []; nan_count = 0; best_val = float("inf"); best_state = None; stale_epochs = 0
+        use_scaler = device.type == "cuda" and cfg.get("amp", True) and cfg.get("precision", "bfloat16") == "float16"
+        scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
         if device.type == "cuda": torch.cuda.reset_peak_memory_stats(device)
         for epoch in range(1, cfg["epochs"] + 1):
             model.train(); total = 0.0
             for x, y, lengths in loader:
-                x, y, lengths = x.to(device), y.to(device), lengths.to(device); opt.zero_grad(set_to_none=True); loss = loss_fn(model(x, lengths), y); nan_count += int(not torch.isfinite(loss).item()); loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step(); total += loss.item()
-            rows.append({"epoch": epoch, "train_loss": total / max(1, len(loader))}); print(json.dumps({"model": name, **rows[-1]}), flush=True)
-        model.eval(); probs = []
-        with torch.no_grad():
-            for x, _, lengths in DataLoader(test_ds, cfg["batch_size"]): probs.extend(torch.sigmoid(model(x.to(device), lengths.to(device))).cpu().numpy())
-        probs = np.asarray(probs); all_preds[name] = probs; elapsed = time.time() - start; results[name] = metrics(y_test, probs, slices); results[name].update({"parameter_count": sum(p.numel() for p in model.parameters()), "training_time_seconds": elapsed, "examples_per_second": len(train_ds) * cfg["epochs"] / max(elapsed, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "gradient_nan_count": nan_count, "device": str(device), "history": rows})
-        torch.save({"model": model.state_dict(), "vocab": vocab.stoi, "config": cfg}, ckpt / f"{name}.pt")
+                x, y, lengths = x.to(device, non_blocking=True), y.to(device, non_blocking=True), lengths.to(device, non_blocking=True); opt.zero_grad(set_to_none=True)
+                with autocast_context(device, cfg): loss = loss_fn(model(x, lengths), y)
+                nan_count += int(not torch.isfinite(loss).item())
+                if use_scaler:
+                    scaler.scale(loss).backward(); scaler.unscale_(opt); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); scaler.step(opt); scaler.update()
+                else:
+                    loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step()
+                total += loss.item()
+            train_loss = total / max(1, len(loader)); val_loss = evaluate_loader(model, val_loader, loss_fn, device, cfg); scheduler.step(val_loss); current_lr = opt.param_groups[0]["lr"]
+            if val_loss < best_val - cfg.get("min_delta", 1e-4): best_val = val_loss; best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}; stale_epochs = 0
+            else: stale_epochs += 1
+            rows.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss, "learning_rate": current_lr}); print(json.dumps({"model": name, **rows[-1]}), flush=True)
+            if stale_epochs >= cfg.get("early_stopping_patience", 3): print(json.dumps({"model": name, "early_stopping": True, "epoch": epoch}), flush=True); break
+        if best_state is not None: model.load_state_dict(best_state)
+        _, _, probs = evaluate_loader(model, test_loader, loss_fn, device, cfg, return_probs=True)
+        all_preds[name] = probs; elapsed = time.time() - start; results[name] = metrics(y_test, probs, slices); results[name].update({"parameter_count": sum(p.numel() for p in model.parameters()), "training_time_seconds": elapsed, "examples_per_second": len(train_ds) * len(rows) / max(elapsed, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "gradient_nan_count": nan_count, "device": str(device), "best_validation_loss": best_val, "history": rows})
+        torch.save({"model": model.state_dict(), "vocab": vocab.stoi, "config": cfg, "best_validation_loss": best_val}, ckpt / f"{name}.pt")
         (out / f"{name}_history.json").write_text(json.dumps(rows, indent=2))
         if base_pred is None: base_pred = (probs >= .5).astype(int)
     for name, probs in all_preds.items():

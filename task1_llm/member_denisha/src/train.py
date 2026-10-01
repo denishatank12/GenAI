@@ -13,6 +13,7 @@ import os
 import random
 import time
 import re
+from contextlib import nullcontext
 from pathlib import Path
 
 import numpy as np
@@ -114,11 +115,18 @@ class GPTFromScratch(nn.Module):
 def choose_device(value): return torch.device("cuda" if value == "auto" and torch.cuda.is_available() else ("cpu" if value == "auto" else value))
 
 
-def evaluate(model, loader, device):
+def autocast_context(device, cfg):
+    if device.type != "cuda" or not cfg.get("amp", True): return nullcontext()
+    dtype = torch.float16 if cfg.get("precision", "bfloat16").lower() == "float16" else torch.bfloat16
+    return torch.autocast(device_type="cuda", dtype=dtype)
+
+
+def evaluate(model, loader, device, cfg):
     model.eval(); total = n = correct = 0
     with torch.no_grad():
         for x, y in loader:
-            x, y = x.to(device), y.to(device); logits, loss = model(x, y)
+            x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+            with autocast_context(device, cfg): logits, loss = model(x, y)
             total += loss.item() * y.numel(); n += y.numel(); correct += (logits.argmax(-1) == y).sum().item()
     loss = total / max(n, 1); return loss, correct / max(n, 1)
 
@@ -171,38 +179,58 @@ def main():
     stride = cfg.get("stride", cfg["sequence_length"])
     train_dataset = CharDataset(train_data, cfg["sequence_length"], stride)
     val_dataset = CharDataset(val_data, cfg["sequence_length"], stride)
-    loader_kwargs = {"num_workers": cfg["num_workers"]}
+    device = choose_device(cfg["device"])
+    torch.set_float32_matmul_precision("high")
+    if device.type == "cuda":
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+    loader_kwargs = {"num_workers": cfg["num_workers"], "pin_memory": bool(cfg.get("pin_memory", True) and device.type == "cuda")}
     if cfg["num_workers"] > 0:
         loader_kwargs["persistent_workers"] = True
+        loader_kwargs["prefetch_factor"] = 2
     train_loader = DataLoader(train_dataset, cfg["batch_size"], shuffle=True, **loader_kwargs)
     val_loader = DataLoader(val_dataset, cfg["batch_size"], shuffle=False, **loader_kwargs)
     print(json.dumps({"device": str(choose_device(cfg["device"])), "train_stories": len(train_stories), "validation_stories": len(val_stories), "train_characters": len(train_data), "validation_characters": len(val_data), "stride": stride, "train_sequences": len(train_dataset), "validation_sequences": len(val_dataset), "batches_per_epoch": len(train_loader), "total_training_batches": len(train_loader) * cfg["epochs"]}), flush=True)
-    device = choose_device(cfg["device"]); model = GPTFromScratch(len(chars), cfg).to(device)
+    model = GPTFromScratch(len(chars), cfg).to(device)
     if device.type == "cuda": torch.cuda.reset_peak_memory_stats(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"])
     total_steps = cfg["epochs"] * max(1, len(train_loader)); warmup = cfg["warmup_steps"]; train_tokens = 0; nan_count = 0
     def lr_lambda(step): return min((step + 1) / max(1, warmup), 1.0) * max(0.1, 0.5 * (1 + math.cos(math.pi * step / max(1, total_steps))))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda); history = []; start = time.time(); step = 0
-    for epoch in range(1, cfg["epochs"] + 1):
+    use_scaler = device.type == "cuda" and cfg.get("amp", True) and cfg.get("precision", "bfloat16").lower() == "float16"
+    scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
+    start_epoch = 1
+    if cfg.get("resume_from"):
+        state = torch.load(cfg["resume_from"], map_location=device)
+        model.load_state_dict(state["model"]); optimizer.load_state_dict(state["optimizer"]); scheduler.load_state_dict(state["scheduler"])
+        history = state.get("history", []); step = int(state.get("step", 0)); start_epoch = int(state.get("epoch", 0)) + 1
+        print(json.dumps({"resumed_from": cfg["resume_from"], "start_epoch": start_epoch}), flush=True)
+    for epoch in range(start_epoch, cfg["epochs"] + 1):
         model.train(); train_loss = 0.0; batches = 0
         for x, y in train_loader:
-            x, y = x.to(device), y.to(device); optimizer.zero_grad(set_to_none=True); _, loss = model(x, y); nan_count += int(not torch.isfinite(loss).item()); loss.backward()
-            grad_norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["gradient_clip_norm"])); optimizer.step(); scheduler.step(); step += 1
+            x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True); optimizer.zero_grad(set_to_none=True)
+            with autocast_context(device, cfg): _, loss = model(x, y)
+            nan_count += int(not torch.isfinite(loss).item())
+            if use_scaler:
+                scaler.scale(loss).backward(); scaler.unscale_(optimizer); grad_norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["gradient_clip_norm"])); scaler.step(optimizer); scaler.update()
+            else:
+                loss.backward(); grad_norm = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["gradient_clip_norm"])); optimizer.step()
+            scheduler.step(); step += 1
             train_loss += loss.item(); batches += 1; train_tokens += int(y.numel())
             if batches % cfg.get("log_interval_batches", 250) == 0:
                 print(json.dumps({"epoch": epoch, "batch": batches, "batches_per_epoch": len(train_loader), "loss": loss.item(), "lr": optimizer.param_groups[0]["lr"]}), flush=True)
-        train_loss /= max(1, batches); val_loss, val_acc = evaluate(model, val_loader, device)
+        train_loss /= max(1, batches); val_loss, val_acc = evaluate(model, val_loader, device, cfg)
         history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss, "val_accuracy": val_acc, "grad_norm": grad_norm, "lr": optimizer.param_groups[0]["lr"]})
         print(json.dumps(history[-1]), flush=True)
         (out / "history.json").write_text(json.dumps(history, indent=2))
         if cfg.get("save_every_epoch", True):
-            torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch, "config": cfg, "vocab": c2i}, ckpt / f"gpt_from_scratch_epoch_{epoch:03d}.pt")
+            torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch, "step": step, "history": history, "config": cfg, "vocab": c2i}, ckpt / f"gpt_from_scratch_epoch_{epoch:03d}.pt")
     elapsed = time.time() - start; val_ppl = math.exp(min(20, history[-1]["val_loss"]))
     prompt_text = train_stories[0][:min(24, len(train_stories[0]))]
     prompt_ids = torch.tensor([[c2i[c] for c in prompt_text]], device=device)
     samples = {}; gen_start = time.time(); generated = None
     for temperature in (0.7, 0.9, 1.1):
-        ids = model.generate(prompt_ids, 300, temperature)[0].cpu()
+        with autocast_context(device, cfg): ids = model.generate(prompt_ids, 300, temperature)[0].cpu()
         if generated is None: generated = ids
         samples[str(temperature)] = "".join(i2c[int(i)] for i in ids)
     generation_time = time.time() - gen_start; sample = samples["0.9"]
