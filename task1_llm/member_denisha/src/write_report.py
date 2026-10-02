@@ -22,7 +22,7 @@ def repeated_4gram_rate(text: str) -> float:
 
 
 def clean_snippet(text: str) -> str:
-    return text.replace("`", "'").replace("\n", " ").strip()[:300]
+    return text.replace("`", "'").replace("|", "/").replace("\n", " ").strip()[:300]
 
 
 metrics_path = OUT / "metrics.csv"
@@ -52,6 +52,8 @@ The tokenizer is an explicit character vocabulary built from the selected storie
 | Bits per character | {fmt(metrics['bits_per_character'])} |
 | Generalization gap | {fmt(metrics['generalization_gap'])} |
 | Top-1 next-character accuracy | {fmt(metrics['top1_next_character_accuracy'])} |
+| Final gradient norm | {fmt(metrics['final_grad_norm'])} |
+| Maximum epoch gradient norm | {fmt(metrics['max_grad_norm'])} |
 | Distinct-1 / 2 / 3 | {fmt(metrics['distinct_1'])} / {fmt(metrics['distinct_2'])} / {fmt(metrics['distinct_3'])} |
 | Repeated 4-gram rate | {fmt(metrics['repeated_4gram_rate'])} |
 | Parameters | {metrics['parameter_count']} |

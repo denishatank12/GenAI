@@ -8,6 +8,12 @@ if args.task == 'task1':
     out, ck = root/'task1_llm/member_denisha/outputs', root/'task1_llm/member_denisha/checkpoints'
     for p in [out/'metrics.csv', out/'history.json', out/'samples.json', out/'sample.txt', out/'loss_curves.png', ck/'gpt_from_scratch.pt', root/'task1_llm/member_denisha/failure_analysis.md', root/'task1_llm/member_denisha/results.md']:
         if not p.exists(): errors.append(f'missing {p}')
+    if (out/'metrics.csv').exists():
+        import csv
+        with (out/'metrics.csv').open(newline='') as stream:
+            fields = set(next(csv.reader(stream), []))
+        for field in ['final_grad_norm', 'max_grad_norm', 'gradient_nan_count']:
+            if field not in fields: errors.append(f'metrics.csv missing {field}')
 if args.task == 'task2':
     out, ck = root/'task2_sentiment/member_denisha/outputs', root/'task2_sentiment/member_denisha/checkpoints'
     for p in [out/'metrics.json', out/'metrics_summary.csv', out/'error_review.json', ck/'baseline.pt', ck/'experimental_cnn.pt', ck/'experimental_gru.pt']:
