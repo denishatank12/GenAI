@@ -47,7 +47,7 @@ def autocast_context(device: torch.device, cfg: dict):
 
 class ImageDomain(Dataset):
     def __init__(self, root: Path, size: int, train: bool, crop_margin: int, random_flip: bool):
-        self.files = sorted(p for p in root.glob("**/*") if p.suffix.lower() in IMAGE_EXTENSIONS)
+        self.files = sorted(p for p in root.glob("**/*") if not p.name.startswith("._") and p.name != ".DS_Store" and p.suffix.lower() in IMAGE_EXTENSIONS)
         if not self.files: raise FileNotFoundError(f"No images found in {root}")
         if train:
             ops = [transforms.Resize(size + crop_margin, interpolation=transforms.InterpolationMode.BICUBIC), transforms.RandomCrop(size)]

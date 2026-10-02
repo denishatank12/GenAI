@@ -23,7 +23,7 @@ from torchvision.models import Inception3, Inception_V3_Weights, inception_v3
 
 class Images(Dataset):
     def __init__(self, path):
-        self.files = sorted(p for p in Path(path).glob("**/*") if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
+        self.files = sorted(p for p in Path(path).glob("**/*") if not p.name.startswith("._") and p.name != ".DS_Store" and p.suffix.lower() in {".jpg", ".jpeg", ".png"})
         self.tf = Inception_V3_Weights.DEFAULT.transforms()
 
     def __len__(self): return len(self.files)
