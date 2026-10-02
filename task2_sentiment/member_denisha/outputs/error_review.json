@@ -1,0 +1,211 @@
+[
+  {
+    "index": 209813,
+    "text": "Save your $300 initial consultation and go to a Macy's personal shopper--they are free.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "short",
+    "review_bucket": "confident_false_positive"
+  },
+  {
+    "index": 175758,
+    "text": "Yup",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "short",
+    "review_bucket": "confident_false_positive"
+  },
+  {
+    "index": 25992,
+    "text": "The National used to be one of the very best mountain biking trails around unfortunately the rangers have been demolishing the natural obstacles, smoothing out the trail, I call it de-naturalizing.\\n\\n\\\"\"They paved paradise and put up a parking lot\\\"\".",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "short",
+    "review_bucket": "confident_false_positive"
+  },
+  {
+    "index": 340441,
+    "text": "rice galore!",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "short",
+    "review_bucket": "confident_false_positive"
+  },
+  {
+    "index": 174044,
+    "text": "I love this place every thing about it from the great help to the great quality of the furniture wow that is all I have to say",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "short",
+    "review_bucket": "confident_false_positive"
+  },
+  {
+    "index": 204270,
+    "text": "Not expensive..",
+    "label": 1,
+    "prediction": 0,
+    "probability": 6.07222318649292e-07,
+    "error_type": "false_negative",
+    "confidence": 0.49999940395355225,
+    "slice": "short",
+    "review_bucket": "confident_false_negative"
+  },
+  {
+    "index": 379608,
+    "text": "Convenient & OK Mex",
+    "label": 1,
+    "prediction": 0,
+    "probability": 3.9637088775634766e-06,
+    "error_type": "false_negative",
+    "confidence": 0.49999603629112244,
+    "slice": "short",
+    "review_bucket": "confident_false_negative"
+  },
+  {
+    "index": 465105,
+    "text": "False advertising!  \\nJohn ISN'T grouchy!",
+    "label": 1,
+    "prediction": 0,
+    "probability": 4.231929779052734e-06,
+    "error_type": "false_negative",
+    "confidence": 0.49999576807022095,
+    "slice": "short",
+    "review_bucket": "confident_false_negative"
+  },
+  {
+    "index": 1643,
+    "text": "Sooo blacked out here that\\nWe heckled the guitarist.\\nNot sorry. He sucked.",
+    "label": 1,
+    "prediction": 0,
+    "probability": 7.867813110351562e-06,
+    "error_type": "false_negative",
+    "confidence": 0.49999213218688965,
+    "slice": "short",
+    "review_bucket": "confident_false_negative"
+  },
+  {
+    "index": 198250,
+    "text": "went for breakfast. avoided the horrible buffet crowds. kobe short ribs. boo-yah.",
+    "label": 1,
+    "prediction": 0,
+    "probability": 1.0132789611816406e-05,
+    "error_type": "false_negative",
+    "confidence": 0.4999898672103882,
+    "slice": "short",
+    "review_bucket": "confident_false_negative"
+  },
+  {
+    "index": 505121,
+    "text": "The massage was nice, but the mani/pedi wasn't so great. I have a few nicks on my fingers because my cuticles and the skin around my nails weren't softened enough beforehand, and they scraped the side of my foot with the little tool they use to scrub the bottom of your feet. Neither of these is a huge deal, but it makes me nervous getting scraped up during a mani/pedi since I have heard stories of infections from nail salons. (Not form this place specifically, just in general.) Hopefully your experience is a little nicer! I probably won't be back.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 0.5,
+    "error_type": "false_positive",
+    "confidence": 0.0,
+    "slice": "medium",
+    "review_bucket": "near_threshold"
+  },
+  {
+    "index": 269690,
+    "text": "My visit here was such a major let down. Going in, I was quite excited. The choices seemed endless and my mind was working overtime creating various concoctions of burgers and shakes. But alas, it was all in vain.\\n\\nThe exterior is rather deceptive. It can be easy to drive right by this place. And the outside doesn't even hint at the inside. But I found the inside to be a bit of a let down. 50s diner themes can be great. But this place felt like they phoned it in.\\n\\nBefore reviewing the menu, I had already decided on my custom milkshake. One of my absolute favorite milkshakes I've ever had was a \\\"\"freckle face\\\"\" (chocolate chip). And here was my opportunity to have that again and add a little something extra, like perhaps coconut. But upon looking at the menu, I discovered that they don't have chocolate chips. Undeterred and still feeling optimistic, I opted for the Almond Joy. When my shake arrived, though, it was basically a chocolate milkshake with some generic flavoring labeled \\\"\"Almond Joy\\\"\". There were no chunks (like the menu pictures had led me to believe) or great flavors or anything. And I don't know why they even bothered serving it with a spoon - it was all liquidity, no thickness.\\n\\nFor a starter / side, I opted for a half order of half fries, half onion rings. And I, of course, had a mini freak out when I saw the dipping sauces (I have a major love for dipping sauces) and was compelled to order the foursome (one of each of their sauces). Another let down. The fries were delicious, but the onion rings were too greasy to eat. And the only dipping sauce that was edible was the cheese sauce (which was totally out of a can). Though, I guess when it comes to value, I can say that the half order was huge and enough for a family of 4.\\n\\nFor the burger, I went with the 1/3 lb., medium, with bacon, blue cheese, lettuce, and tomato. I figured it was a rather safe, non-crazy choice - so I could be sure to judge the burger on the burger, as opposed to the win or fail of some crazy flavor combination. When the burger arrived, it looked great. I cut it in half and it looked like a perfect medium. But after the first bite, I was seriously underwhelmed. There was zero flavor. How could a burger be flavorless? It was medium and pink, but not juicy. It was pretty much inedible. Now, I am hoping that perhaps this place is just hit or miss. My friend had been here before, and ordered the exact same burger, and loved it. And even he (who was along this trip to watch me eat) agreed that the burger this time was quite bad.\\n\\nSo despite the service being good and there being some neat things (like a photo album on each table with pictures of the 1 lb. burger challenge), the food was not good.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 0.5,
+    "error_type": "false_positive",
+    "confidence": 0.0,
+    "slice": "long",
+    "review_bucket": "near_threshold"
+  },
+  {
+    "index": 436767,
+    "text": "I did not enjoy my meal here very much. Perhaps I should have tried something off the \\\"\"authentic\\\"\" menu but I just wanted a simple American style Hunan chicken. The dish was slathered in way too much sauce and it was too sugary and not salty/spicy enough. The hot and sour soup was delicious though. I would give it another try but first I am going to explore some other Chinese options in Pittsburgh.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 0.5,
+    "error_type": "false_positive",
+    "confidence": 0.0,
+    "slice": "medium",
+    "review_bucket": "near_threshold"
+  },
+  {
+    "index": 424220,
+    "text": "Cette petite cantine vietnamienne toujours occup\\u00e9e m'a longtemps intrigu\\u00e9e.... A tort ! Je passerai d\\u00e9sormais mon chemin. C'est du rechauff\\u00e9, trop \\u00e9pic\\u00e9. Dommage.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 0.5,
+    "error_type": "false_positive",
+    "confidence": 0.0,
+    "slice": "short",
+    "review_bucket": "near_threshold"
+  },
+  {
+    "index": 150739,
+    "text": "The line is really long and those little vip passes are a joke. So if your a couple, mixed group, or a non barbie looking group of females expect to wait a while. Inside It was really crowded and there was more 30+ aged men than I thought there would be especially in the pussycat doll lounge. This place looks really nice the layout is great, just don't try to sit anywhere, even to fix the strap on your shoes, unless you have a table! Overall I did not have a good time because the line wait, the crowds, there was hardly anywhere to dance and thats why I go to clubs its to boogie. Also the night I went, Friday, it really seem like a Britney crowd, take it for what its worth.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 0.5,
+    "error_type": "false_positive",
+    "confidence": 0.0,
+    "slice": "medium",
+    "review_bucket": "near_threshold"
+  },
+  {
+    "index": 43253,
+    "text": "Friendly service and a funky throwback ambiance make this place a fun alternative to delicious food.  I love a good hot dog, but I'm not convinced that Ted's serves one.   Still, it may be worth a trip to bask in their quirky ambience... And who knows, maybe one of their Loganberry milkshakes.  \\n\\nBut, hotdogs, I'll cozy up to a Sonoran stand next time I have a craving.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "medium",
+    "review_bucket": "slice_specific"
+  },
+  {
+    "index": 244945,
+    "text": "Duke, Duke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\n\\nYes, a-I, oh, I'm gonna love you\\nOh, oh, nothing can stop me, now\\n'Cause you're The Duke of Earl\\nSo, yeah, yeah, yeah, yeah\\n\\nSorry Earl I didn't love you.  I love you bread and juicy roast beef but the rest of the meats and crap in it sucked.  $6 is cheap for Vegas.  We walked from the Venetian just to eat here at Planet Hollywood.  Its a far ass walk in 100 degree weather.  I was not a happy fatty.  But it was worth it when I saw NeNe walking in the PH being filmed for housewives Atlanta.  woot woot!",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "medium",
+    "review_bucket": "slice_specific"
+  },
+  {
+    "index": 444886,
+    "text": "First off all Slander is a criminal offense in this state, and D.B  from Arizona has SLANDERED this good business, & most likely never made it into The Computer Repair Pros Store, like she claimed for various reasons : 1st.  She is from Arizona as it mentions on her profile 2. There are no women working at that store, all guys sorry D.B. but you mentioned you talked to a woman.. NOT 3. They have on the wall a 30 day policy, that if you don't call or come back for the computer in 30 days they are not RESPONSIBLE, and it sounds like neither are you.  The Pros strongly disagree with Slander type attacks that cost businesses money by misleading the public, and this IS A CRIMINAL SLANDER ... Jim m. may or may not of been a customer, but : The Pros diagnostic fee is $25, not $39, and we only charge customers $25 if we can't fix a broken machine, not $100 so this sounds fishy too.  WE HAVE COMPLAINED TO YELP ABOUT THIS, YET YELP REFUSES TO REMOVE IT?",
+    "label": 1,
+    "prediction": 0,
+    "probability": 0.000804901123046875,
+    "error_type": "false_negative",
+    "confidence": 0.4991950988769531,
+    "slice": "long",
+    "review_bucket": "slice_specific"
+  },
+  {
+    "index": 168893,
+    "text": "I've been to Il Mulino in NYC many times and have never been disappointed.  I've eaten at this Il Mulino in Vegas a few times and always had a flawless experience until the other night.  Don't get me wrong, the food is always prepared and served as ordered and it's absolutely the highest quality.  My only issue was a rude comment the waiter made when one of my guests asked for another piece of parmesan cheese, which is basically a \\\"\"no-charge\\\"\" appetizer. A few minutes earlier, I had asked for another piece and the waiter cut two smaller pieces and put it on my plate.  When my guest asked for another piece, the waiter said \\\"\"I just gave him two\\\"\".  It was said rather rudely, not taking into account that it was also on my plate that was used for other appetizers as well.  That being said, the captain and the meal were on point but I don't think the experience was flawless.  Maybe they should have offered a paid option, which we wouldn't have minded.",
+    "label": 1,
+    "prediction": 0,
+    "probability": 0.00099945068359375,
+    "error_type": "false_negative",
+    "confidence": 0.49900054931640625,
+    "slice": "long",
+    "review_bucket": "slice_specific"
+  }
+]
