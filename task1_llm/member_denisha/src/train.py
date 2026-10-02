@@ -1,4 +1,4 @@
-"""Train and evaluate a character-level GPT implemented without attention modules.
+"""Train and evaluate a character-level GPT with attention implemented from scratch.
 
 Run from this directory with:
     python src/train.py --config config.yaml
