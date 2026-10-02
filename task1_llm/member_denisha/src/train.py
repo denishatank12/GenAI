@@ -217,6 +217,7 @@ def main():
     start_epoch = 1
     if cfg.get("resume_from"):
         state = torch.load(cfg["resume_from"], map_location=device)
+        previous_metrics.update(state.get("metrics", {}))
         model.load_state_dict(state["model"]); optimizer.load_state_dict(state["optimizer"]); scheduler.load_state_dict(state["scheduler"])
         history = state.get("history", []); step = int(state.get("step", 0)); start_epoch = int(state.get("epoch", 0)) + 1
         print(json.dumps({"resumed_from": cfg["resume_from"], "start_epoch": start_epoch}), flush=True)
@@ -271,6 +272,9 @@ def main():
     peak_memory = (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" and ran_training else float(previous_metrics.get("peak_memory_mb", 0.0)))
     metrics = {"train_loss": history[-1]["train_loss"], "validation_loss": history[-1]["val_loss"], "perplexity": val_ppl, "bits_per_character": history[-1]["val_loss"] / math.log(2), "generalization_gap": history[-1]["val_loss"] - history[-1]["train_loss"], "top1_next_character_accuracy": history[-1]["val_accuracy"], "gradient_nan_count": nan_count, "parameter_count": sum(p.numel() for p in model.parameters()), "training_tokens_per_second": tokens_per_second, "generation_tokens_per_second": (sum(len(s) for s in samples.values())) / max(generation_time, 1e-9), "peak_memory_mb": peak_memory, "training_time_seconds": training_time, "device": str(device), "vocabulary_size": len(chars), **generation_metrics(sample)}
     with (out / "metrics.csv").open("w", newline="") as f: w = csv.DictWriter(f, fieldnames=metrics); w.writeheader(); w.writerow(metrics)
+    # Store final performance fields in the final checkpoint so a later Colab
+    # session can evaluate a completed run without losing throughput/time data.
+    torch.save({"model": model.state_dict(), "config": cfg, "vocab": c2i, "metrics": metrics, "history": history, "epoch": cfg["epochs"], "step": step}, ckpt / "gpt_from_scratch.pt")
     print(json.dumps(metrics, indent=2))
 
 
