@@ -255,13 +255,13 @@ def main():
     fn = sorted([r for r in error_rows if r["error_type"] == "false_negative"], key=lambda r: -r["confidence"])
     near = sorted(error_rows, key=lambda r: abs(r["probability"] - .5)); slice_rows = []
     for slice_name in ["short", "medium", "long"]:
-        slice_rows.extend(sorted([r for r in error_rows if r["slice"] == slice_name], key=lambda r: -r["confidence"])[:2])
+        slice_rows.extend(sorted([r for r in error_rows if r["slice"] == slice_name], key=lambda r: -r["confidence"])[:5])
     selected = []; used = set()
     def add(rows, bucket, limit):
         for row in rows:
             if len([x for x in selected if x["review_bucket"] == bucket]) >= limit: break
             if row["index"] not in used: row = {**row, "review_bucket": bucket}; selected.append(row); used.add(row["index"])
-    add(fp, "confident_false_positive", 5); add(fn, "confident_false_negative", 5); add(near, "near_threshold", 5); add(slice_rows, "slice_specific", 5)
+    add(fp, "confident_false_positive", 5); add(fn, "confident_false_negative", 5); add(slice_rows, "slice_specific", 5); add(near, "near_threshold", 5)
     (out / "error_review.json").write_text(json.dumps(selected, indent=2))
     (out / "metrics.json").write_text(json.dumps(results, indent=2)); (out / "metrics_summary.csv").write_text(pd.DataFrame([{ "model": k, **{m: v for m, v in val.items() if isinstance(v, (int, float))}} for k, val in results.items()]).to_csv(index=False)); print(json.dumps(results, indent=2))
 

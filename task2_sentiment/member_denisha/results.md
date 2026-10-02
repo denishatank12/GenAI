@@ -69,7 +69,8 @@ phrase boundaries more explicitly—for example, add a small learned attention-p
 head or compare the current stemming/stopword policy against a version that retains all
 function words—and evaluate the change on the same fixed split.
 
-The 20 required error examples must be manually reviewed from `outputs/error_review.json`:
-five confident false positives, five confident false negatives, five near-threshold cases,
-and five slice-specific cases. Each example needs an error type, written explanation, and
-one testable fix in `failure_analysis.md`.
+The manual review is documented in `failure_analysis.md` using the supplied review file.
+That file contains 19 unique records: five confident false positives, five confident false
+negatives, five near-threshold errors, and four slice-specific errors. One additional unique
+slice-specific example must be selected from the same test predictions before submission
+to satisfy the lab's required total of 20 reviewed cases.
