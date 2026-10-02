@@ -167,6 +167,14 @@ def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--config", default="config.yaml"); ap.add_argument("--checkpoint-dir", default=None); ap.add_argument("--resume-latest", action="store_true"); args = ap.parse_args()
     cfg = yaml.safe_load(Path(args.config).read_text()); seed_everything(cfg["seed"])
     root = Path.cwd(); out = root / "outputs"; ckpt = Path(args.checkpoint_dir or cfg.get("checkpoint_dir", "checkpoints")); ckpt = ckpt if ckpt.is_absolute() else root / ckpt; out.mkdir(exist_ok=True); ckpt.mkdir(parents=True, exist_ok=True)
+    previous_metrics = {}
+    previous_metrics_path = out / "metrics.csv"
+    if previous_metrics_path.exists():
+        try:
+            with previous_metrics_path.open(newline="") as stream:
+                previous_metrics = next(csv.DictReader(stream), {})
+        except (OSError, StopIteration, csv.Error):
+            previous_metrics = {}
     if args.resume_latest and not cfg.get("resume_from"):
         latest = ckpt / "gpt_from_scratch_latest.pt"
         if latest.exists(): cfg["resume_from"] = str(latest)
@@ -254,7 +262,14 @@ def main():
     (out / "samples.json").write_text(json.dumps(samples, indent=2), encoding="utf-8")
     (out / "history.json").write_text(json.dumps(history, indent=2)); (out / "vocab.json").write_text(json.dumps({"char_to_idx": c2i, "idx_to_char": i2c}, indent=2))
     torch.save({"model": model.state_dict(), "config": cfg, "vocab": c2i}, ckpt / "gpt_from_scratch.pt")
-    metrics = {"train_loss": history[-1]["train_loss"], "validation_loss": history[-1]["val_loss"], "perplexity": val_ppl, "bits_per_character": history[-1]["val_loss"] / math.log(2), "generalization_gap": history[-1]["val_loss"] - history[-1]["train_loss"], "top1_next_character_accuracy": history[-1]["val_accuracy"], "gradient_nan_count": nan_count, "parameter_count": sum(p.numel() for p in model.parameters()), "training_tokens_per_second": train_tokens / max(elapsed, 1e-9), "generation_tokens_per_second": (sum(len(s) for s in samples.values())) / max(generation_time, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "training_time_seconds": elapsed, "device": str(device), "vocabulary_size": len(chars), **generation_metrics(sample)}
+    # If a completed checkpoint is evaluated again, no training batches run in
+    # this invocation. Preserve the original run's performance fields instead
+    # of replacing them with a misleading zero-throughput evaluation time.
+    ran_training = train_tokens > 0
+    tokens_per_second = train_tokens / max(elapsed, 1e-9) if ran_training else float(previous_metrics.get("training_tokens_per_second", 0.0))
+    training_time = elapsed if ran_training else float(previous_metrics.get("training_time_seconds", 0.0))
+    peak_memory = (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" and ran_training else float(previous_metrics.get("peak_memory_mb", 0.0)))
+    metrics = {"train_loss": history[-1]["train_loss"], "validation_loss": history[-1]["val_loss"], "perplexity": val_ppl, "bits_per_character": history[-1]["val_loss"] / math.log(2), "generalization_gap": history[-1]["val_loss"] - history[-1]["train_loss"], "top1_next_character_accuracy": history[-1]["val_accuracy"], "gradient_nan_count": nan_count, "parameter_count": sum(p.numel() for p in model.parameters()), "training_tokens_per_second": tokens_per_second, "generation_tokens_per_second": (sum(len(s) for s in samples.values())) / max(generation_time, 1e-9), "peak_memory_mb": peak_memory, "training_time_seconds": training_time, "device": str(device), "vocabulary_size": len(chars), **generation_metrics(sample)}
     with (out / "metrics.csv").open("w", newline="") as f: w = csv.DictWriter(f, fieldnames=metrics); w.writeheader(); w.writerow(metrics)
     print(json.dumps(metrics, indent=2))
 
