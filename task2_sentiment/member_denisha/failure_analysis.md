@@ -42,9 +42,10 @@ These examples had probability approximately 0.5, so the model was appropriately
 | Example | Slice | Evidence | Human interpretation | Testable fix |
 |---|---|---|---|---|
 | 16 | Medium | Service and ambience are positive, but the reviewer rejects the hot dog and plans to visit another place. | The model overweights opening praise and misses the product judgment. | Add more mixed-aspect reviews and conclusion-aware pooling. |
-| 17 | Medium | The review contains excitement about a celebrity sighting and cheap food, but says the food was poor and the writer unhappy. | Event excitement distracts from the actual food evaluation. | Separate event/entity excitement from review sentiment. |
-| 18 | Long | A business response strongly denies accusations and uses defensive language. | The model reads words such as “good business” and “criminal” without identifying response style. | Add a response-text indicator and evaluate responses separately. |
-| 19 | Long | The review praises food quality and past visits but ends with dissatisfaction about rude service. | Repeated positive descriptions outweigh the final complaint. | Use hierarchical sentence attention and test final-sentence weighting. |
+| 17 | Medium | The review is excited about a celebrity sighting and cheap food, but also says the food was poor and the writer unhappy. | Event excitement distracts from the actual food evaluation. | Separate event/entity excitement from review sentiment. |
+| 18 | Medium | The review praises spicy chicken, rice, sauce, speed, and price, but the dataset label is negative. | This looks like a possible label-noise or annotation-mismatch case rather than a simple model failure. | Audit the source label and compare neighboring examples before changing the model. |
+| 19 | Medium | Service is described as rushed and pushy, but individual employees and the food are praised. | Mixed aspect-level sentiment makes the overall label difficult to infer. | Use aspect-level attention or sentence-level evidence aggregation. |
+| 20 | Medium | The reviewer praises a promoter and room layout but criticizes crowding and the value of a table. | Positive entity-specific language competes with a negative overall experience. | Add entity/aspect separation and evaluate the final overall judgment. |
 
 ## Overall findings
 
@@ -52,7 +53,7 @@ The errors are systematic rather than random. Short reviews lack context, while 
 reviews are difficult when positive and negative aspects coexist. Negation, sarcasm, slang,
 multilingual text, and late overall conclusions recur across the examples.
 
-The supplied review file contains 19 unique records: five confident false positives, five
-confident false negatives, five near-threshold errors, and four slice-specific records.
-One additional unique slice-specific error is still required by the lab. It must come from
-the actual test predictions rather than being invented.
+The updated review file contains all 20 required unique records: five confident false
+positives, five confident false negatives, five near-threshold errors, and five
+slice-specific errors. The cases are drawn from the actual test predictions and are ready
+for inclusion in the report.

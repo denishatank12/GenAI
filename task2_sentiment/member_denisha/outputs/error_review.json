@@ -110,6 +110,61 @@
     "review_bucket": "confident_false_negative"
   },
   {
+    "index": 43253,
+    "text": "Friendly service and a funky throwback ambiance make this place a fun alternative to delicious food.  I love a good hot dog, but I'm not convinced that Ted's serves one.   Still, it may be worth a trip to bask in their quirky ambience... And who knows, maybe one of their Loganberry milkshakes.  \\n\\nBut, hotdogs, I'll cozy up to a Sonoran stand next time I have a craving.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "medium",
+    "review_bucket": "slice_specific"
+  },
+  {
+    "index": 244945,
+    "text": "Duke, Duke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\n\\nYes, a-I, oh, I'm gonna love you\\nOh, oh, nothing can stop me, now\\n'Cause you're The Duke of Earl\\nSo, yeah, yeah, yeah, yeah\\n\\nSorry Earl I didn't love you.  I love you bread and juicy roast beef but the rest of the meats and crap in it sucked.  $6 is cheap for Vegas.  We walked from the Venetian just to eat here at Planet Hollywood.  Its a far ass walk in 100 degree weather.  I was not a happy fatty.  But it was worth it when I saw NeNe walking in the PH being filmed for housewives Atlanta.  woot woot!",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "medium",
+    "review_bucket": "slice_specific"
+  },
+  {
+    "index": 233607,
+    "text": "Complete Madness!!!  \\n\\nWell, the spicy chicken is at least.  A very simple Asian menu of rice, choice of meat and salad.  But the salad dressing is amazing, the spicy chicken delicious and the rice...well its rice, but top it all off with the made-from-scratch teriyaki sauce and I'm sold.  \\n\\nA quick and easy meal you can get to go and is priced very reasonable.  I've only had the spicy chicken (which is amazing), but I don't know if I would venture to any of the other options.  The spicy chicken had me from the get-go.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "medium",
+    "review_bucket": "slice_specific"
+  },
+  {
+    "index": 291695,
+    "text": "Disappointing service. Servers, hosts, and every worker I saw was rushed and pushy. Never deferring to guests when walking aisles. I understand being timely, but leave the pushiness back of the house. When you are on stage, play the part. \\n\\nExceptions to the above are Jason and Jennifer. Both understand the art if service. Both are attentive and friendly. \\n\\nFood was amazing as always. The new fresh next menu is terrific.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "medium",
+    "review_bucket": "slice_specific"
+  },
+  {
+    "index": 279914,
+    "text": "The only thing I like about JET is my favorite Vegas promoter...BRAD! Brad seriously hooks it up whenever I'm in town with friends (which is pretty often). Brad, my friends and I love you! \\n\\nThe main room is always severly cramped, but then again so is every other dance floor in Vegas. I just feel like it's not really worth it to get a table here since they all fall within the \\\"\"whatever\\\"\" category. I definitely prefer going into the smaller room because there's a lot more room to move around and it is much easier to get a drink.",
+    "label": 0,
+    "prediction": 1,
+    "probability": 1.0,
+    "error_type": "false_positive",
+    "confidence": 0.5,
+    "slice": "medium",
+    "review_bucket": "slice_specific"
+  },
+  {
     "index": 505121,
     "text": "The massage was nice, but the mani/pedi wasn't so great. I have a few nicks on my fingers because my cuticles and the skin around my nails weren't softened enough beforehand, and they scraped the side of my foot with the little tool they use to scrub the bottom of your feet. Neither of these is a huge deal, but it makes me nervous getting scraped up during a mani/pedi since I have heard stories of infections from nail salons. (Not form this place specifically, just in general.) Hopefully your experience is a little nicer! I probably won't be back.",
     "label": 0,
@@ -163,49 +218,5 @@
     "confidence": 0.0,
     "slice": "medium",
     "review_bucket": "near_threshold"
-  },
-  {
-    "index": 43253,
-    "text": "Friendly service and a funky throwback ambiance make this place a fun alternative to delicious food.  I love a good hot dog, but I'm not convinced that Ted's serves one.   Still, it may be worth a trip to bask in their quirky ambience... And who knows, maybe one of their Loganberry milkshakes.  \\n\\nBut, hotdogs, I'll cozy up to a Sonoran stand next time I have a craving.",
-    "label": 0,
-    "prediction": 1,
-    "probability": 1.0,
-    "error_type": "false_positive",
-    "confidence": 0.5,
-    "slice": "medium",
-    "review_bucket": "slice_specific"
-  },
-  {
-    "index": 244945,
-    "text": "Duke, Duke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\nDuke, Duke, Duke of Earl\\n\\nYes, a-I, oh, I'm gonna love you\\nOh, oh, nothing can stop me, now\\n'Cause you're The Duke of Earl\\nSo, yeah, yeah, yeah, yeah\\n\\nSorry Earl I didn't love you.  I love you bread and juicy roast beef but the rest of the meats and crap in it sucked.  $6 is cheap for Vegas.  We walked from the Venetian just to eat here at Planet Hollywood.  Its a far ass walk in 100 degree weather.  I was not a happy fatty.  But it was worth it when I saw NeNe walking in the PH being filmed for housewives Atlanta.  woot woot!",
-    "label": 0,
-    "prediction": 1,
-    "probability": 1.0,
-    "error_type": "false_positive",
-    "confidence": 0.5,
-    "slice": "medium",
-    "review_bucket": "slice_specific"
-  },
-  {
-    "index": 444886,
-    "text": "First off all Slander is a criminal offense in this state, and D.B  from Arizona has SLANDERED this good business, & most likely never made it into The Computer Repair Pros Store, like she claimed for various reasons : 1st.  She is from Arizona as it mentions on her profile 2. There are no women working at that store, all guys sorry D.B. but you mentioned you talked to a woman.. NOT 3. They have on the wall a 30 day policy, that if you don't call or come back for the computer in 30 days they are not RESPONSIBLE, and it sounds like neither are you.  The Pros strongly disagree with Slander type attacks that cost businesses money by misleading the public, and this IS A CRIMINAL SLANDER ... Jim m. may or may not of been a customer, but : The Pros diagnostic fee is $25, not $39, and we only charge customers $25 if we can't fix a broken machine, not $100 so this sounds fishy too.  WE HAVE COMPLAINED TO YELP ABOUT THIS, YET YELP REFUSES TO REMOVE IT?",
-    "label": 1,
-    "prediction": 0,
-    "probability": 0.000804901123046875,
-    "error_type": "false_negative",
-    "confidence": 0.4991950988769531,
-    "slice": "long",
-    "review_bucket": "slice_specific"
-  },
-  {
-    "index": 168893,
-    "text": "I've been to Il Mulino in NYC many times and have never been disappointed.  I've eaten at this Il Mulino in Vegas a few times and always had a flawless experience until the other night.  Don't get me wrong, the food is always prepared and served as ordered and it's absolutely the highest quality.  My only issue was a rude comment the waiter made when one of my guests asked for another piece of parmesan cheese, which is basically a \\\"\"no-charge\\\"\" appetizer. A few minutes earlier, I had asked for another piece and the waiter cut two smaller pieces and put it on my plate.  When my guest asked for another piece, the waiter said \\\"\"I just gave him two\\\"\".  It was said rather rudely, not taking into account that it was also on my plate that was used for other appetizers as well.  That being said, the captain and the meal were on point but I don't think the experience was flawless.  Maybe they should have offered a paid option, which we wouldn't have minded.",
-    "label": 1,
-    "prediction": 0,
-    "probability": 0.00099945068359375,
-    "error_type": "false_negative",
-    "confidence": 0.49900054931640625,
-    "slice": "long",
-    "review_bucket": "slice_specific"
   }
 ]
