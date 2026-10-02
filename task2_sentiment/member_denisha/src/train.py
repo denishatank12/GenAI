@@ -239,7 +239,7 @@ def main():
             if stale_epochs >= cfg.get("early_stopping_patience", 3): print(json.dumps({"model": name, "early_stopping": True, "epoch": epoch}), flush=True); break
         if best_state is not None: model.load_state_dict(best_state)
         _, _, probs = evaluate_loader(model, test_loader, loss_fn, device, cfg, return_probs=True)
-        all_preds[name] = probs; elapsed = time.time() - start; results[name] = metrics(y_test, probs, slices); results[name].update({"parameter_count": sum(p.numel() for p in model.parameters()), "training_time_seconds": elapsed, "examples_per_second": len(train_ds) * len(rows) / max(elapsed, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "gradient_nan_count": nan_count, "device": str(device), "best_validation_loss": best_val, "history": rows})
+        all_preds[name] = probs; elapsed = time.time() - start; results[name] = metrics(y_test, probs, slices); results[name].update({"parameter_count": sum(p.numel() for p in model.parameters()), "training_time_seconds": elapsed, "examples_per_second": len(train_ds) * len(rows) / max(elapsed, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "gradient_nan_count": nan_count, "device": str(device), "gpu_name": torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU", "best_validation_loss": best_val, "history": rows})
         torch.save({"model": model.state_dict(), "vocab": vocab.stoi, "config": cfg, "best_validation_loss": best_val}, ckpt / f"{name}.pt")
         (out / f"{name}_history.json").write_text(json.dumps(rows, indent=2))
         if base_pred is None: base_pred = (probs >= .5).astype(int)
@@ -263,7 +263,17 @@ def main():
             if row["index"] not in used: row = {**row, "review_bucket": bucket}; selected.append(row); used.add(row["index"])
     add(fp, "confident_false_positive", 5); add(fn, "confident_false_negative", 5); add(slice_rows, "slice_specific", 5); add(near, "near_threshold", 5)
     (out / "error_review.json").write_text(json.dumps(selected, indent=2))
-    (out / "metrics.json").write_text(json.dumps(results, indent=2)); (out / "metrics_summary.csv").write_text(pd.DataFrame([{ "model": k, **{m: v for m, v in val.items() if isinstance(v, (int, float))}} for k, val in results.items()]).to_csv(index=False)); print(json.dumps(results, indent=2))
+    (out / "metrics.json").write_text(json.dumps(results, indent=2))
+    scalar_rows = [{"model": k, **{m: v for m, v in val.items() if isinstance(v, (int, float))}} for k, val in results.items()]
+    (out / "metrics_summary.csv").write_text(pd.DataFrame(scalar_rows).to_csv(index=False))
+    report_rows = []
+    for model_name, values in results.items():
+        row = {"model": model_name}
+        for key, value in values.items():
+            if key != "history": row[key] = json.dumps(value) if isinstance(value, (dict, list)) else value
+        report_rows.append(row)
+    (out / "metrics_report.csv").write_text(pd.DataFrame(report_rows).to_csv(index=False))
+    print(json.dumps(results, indent=2))
 
 
 if __name__ == "__main__": main()
