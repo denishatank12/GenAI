@@ -23,7 +23,9 @@ log_interval_batches: 50
 save_every_epoch: true
 checkpoint_every_batches: 500
 amp: true
-precision: bfloat16
+# T4-compatible mixed precision. The training code also falls back safely on
+# GPUs that do not support bfloat16.
+precision: float16
 pin_memory: true
 resume_from: null
 device: auto

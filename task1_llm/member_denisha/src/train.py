@@ -117,7 +117,11 @@ def choose_device(value): return torch.device("cuda" if value == "auto" and torc
 
 def autocast_context(device, cfg):
     if device.type != "cuda" or not cfg.get("amp", True): return nullcontext()
-    dtype = torch.float16 if cfg.get("precision", "bfloat16").lower() == "float16" else torch.bfloat16
+    requested = cfg.get("precision", "float16").lower()
+    # Colab T4 is a common target for this lab and does not provide native
+    # bfloat16 support. Fall back to float16 instead of failing at runtime.
+    use_bfloat16 = requested == "bfloat16" and torch.cuda.is_bf16_supported()
+    dtype = torch.bfloat16 if use_bfloat16 else torch.float16
     return torch.autocast(device_type="cuda", dtype=dtype)
 
 
@@ -200,7 +204,7 @@ def main():
     total_steps = cfg["epochs"] * max(1, len(train_loader)); warmup = cfg["warmup_steps"]; train_tokens = 0; nan_count = 0
     def lr_lambda(step): return min((step + 1) / max(1, warmup), 1.0) * max(cfg.get("min_lr_ratio", 0.1), 0.5 * (1 + math.cos(math.pi * step / max(1, total_steps))))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda); history = []; start = time.time(); step = 0
-    use_scaler = device.type == "cuda" and cfg.get("amp", True) and cfg.get("precision", "bfloat16").lower() == "float16"
+    use_scaler = device.type == "cuda" and cfg.get("amp", True) and not (cfg.get("precision", "float16").lower() == "bfloat16" and torch.cuda.is_bf16_supported())
     scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
     start_epoch = 1
     if cfg.get("resume_from"):
@@ -222,7 +226,11 @@ def main():
             train_loss += loss.item(); batches += 1; train_tokens += int(y.numel())
             checkpoint_every = int(cfg.get("checkpoint_every_batches", 0))
             if checkpoint_every > 0 and batches % checkpoint_every == 0:
-                torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch, "step": step, "history": history, "config": cfg, "vocab": c2i}, ckpt / "gpt_from_scratch_latest.pt")
+                # A batch checkpoint is deliberately marked as the previous
+                # completed epoch. On restart the current epoch is repeated
+                # from the beginning rather than incorrectly skipping the
+                # unfinished remainder of an epoch.
+                torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(), "epoch": epoch - 1, "step": step, "history": history, "config": cfg, "vocab": c2i}, ckpt / "gpt_from_scratch_latest.pt")
                 print(json.dumps({"checkpoint": str(ckpt / "gpt_from_scratch_latest.pt"), "epoch": epoch, "batch": batches}), flush=True)
             if batches % cfg.get("log_interval_batches", 250) == 0:
                 print(json.dumps({"epoch": epoch, "batch": batches, "batches_per_epoch": len(train_loader), "loss": loss.item(), "lr": optimizer.param_groups[0]["lr"]}), flush=True)
