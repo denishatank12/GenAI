@@ -57,10 +57,11 @@ experimental models corrected substantially more baseline errors than they intro
 
 ## Hardware and efficiency
 
-The recorded device was CUDA GPU. The exact GPU model must be copied from the raw
-`nvidia-smi` output into this section before submission. Recorded peak memory was 235.16
+The recorded device was an NVIDIA Tesla T4 CUDA GPU in Google Colab. Recorded peak memory was 235.16
 MB for the baseline, 431.43 MB for the CNN, and 1,716.77 MB for the GRU. Training times
-were 36.99 s, 496.98 s, and 148.88 s respectively in the supplied run.
+were 36.99 s, 496.98 s, and 148.88 s respectively in the supplied run. The raw log is
+preserved at `reproducibility/raw_logs/task2_denisha.log`, and the run manifest is at
+`reproducibility/manifests/task2_denisha.json`.
 
 ## Final choice and next steps
 
