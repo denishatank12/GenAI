@@ -6,7 +6,7 @@ ap = argparse.ArgumentParser(); ap.add_argument('--task', choices=['task1','task
 errors = []
 if args.task == 'task1':
     out, ck = root/'task1_llm/member_denisha/outputs', root/'task1_llm/member_denisha/checkpoints'
-    for p in [out/'metrics.csv', out/'history.json', out/'samples.json', out/'sample.txt', out/'loss_curves.png', ck/'gpt_from_scratch.pt', root/'task1_llm/member_denisha/failure_analysis.md', root/'task1_llm/member_denisha/results.md']:
+    for p in [out/'metrics.csv', out/'history.json', out/'samples.json', out/'sample.txt', out/'loss_curves.png', ck/'gpt_from_scratch.pt', root/'task1_llm/member_denisha/failure_analysis.md', root/'task1_llm/member_denisha/results.md', root/'reproducibility/raw_logs/task1_denisha.log', root/'reproducibility/manifests/task1_denisha.json']:
         if not p.exists(): errors.append(f'missing {p}')
     if (out/'metrics.csv').exists():
         import csv
@@ -14,6 +14,12 @@ if args.task == 'task1':
             fields = set(next(csv.reader(stream), []))
         for field in ['final_grad_norm', 'max_grad_norm', 'gradient_nan_count']:
             if field not in fields: errors.append(f'metrics.csv missing {field}')
+        for field in ['training_tokens_per_second', 'generation_tokens_per_second', 'peak_memory_mb', 'training_time_seconds']:
+            try:
+                if float(next(csv.DictReader((out/'metrics.csv').open(newline='')))[field]) <= 0:
+                    errors.append(f'metrics.csv has non-positive {field}')
+            except (KeyError, ValueError, StopIteration):
+                errors.append(f'metrics.csv has invalid {field}')
 if args.task == 'task2':
     out, ck = root/'task2_sentiment/member_denisha/outputs', root/'task2_sentiment/member_denisha/checkpoints'
     for p in [out/'metrics.json', out/'metrics_summary.csv', out/'error_review.json', ck/'baseline.pt', ck/'experimental_cnn.pt', ck/'experimental_gru.pt']:
