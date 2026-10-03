@@ -85,16 +85,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=CONFIG)
     parser.add_argument("--dataset-zip", type=Path, help="Course-provided ZIP containing monet_jpg/ and photo_jpg/")
+    parser.add_argument("--checkpoint-dir", type=Path, default=CHECKPOINT_DIR)
     parser.add_argument("--smoke-only", action="store_true")
     parser.add_argument("--fresh", action="store_true", help="refuse to resume and require an empty checkpoint folder")
     args = parser.parse_args()
     config = args.config if args.config.is_absolute() else REPO_ROOT / args.config
+    checkpoint_dir = args.checkpoint_dir if args.checkpoint_dir.is_absolute() else REPO_ROOT / args.checkpoint_dir
     if args.dataset_zip:
         extract_dataset(args.dataset_zip.expanduser().resolve())
     verify_data()
-    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    if args.fresh and any(CHECKPOINT_DIR.glob("*.pt")):
-        raise SystemExit(f"Checkpoint folder is not empty: {CHECKPOINT_DIR}. Use another folder or remove it deliberately.")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    if args.fresh and any(checkpoint_dir.glob("*.pt")):
+        raise SystemExit(f"Checkpoint folder is not empty: {checkpoint_dir}. Use another folder or remove it deliberately.")
     run([sys.executable, "src/smoke_test.py", "--config", str(config)], cwd=MEMBER_DIR)
     if args.smoke_only:
         print("Smoke test passed; full training was intentionally skipped.")
@@ -102,14 +104,14 @@ def main() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     train_command = [
         sys.executable, "-u", "src/train.py", "--config", str(config),
-        "--checkpoint-dir", str(CHECKPOINT_DIR), "--resume-latest",
+        "--checkpoint-dir", str(checkpoint_dir), "--resume-latest",
     ]
     print(f"\nTraining log: {LOG_PATH}")
     with LOG_PATH.open("a", encoding="utf-8") as log:
         process = subprocess.Popen(train_command, cwd=MEMBER_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         assert process.stdout is not None
         for line in process.stdout:
-            print(line, end="")
+            print(line, end="", flush=True)
             log.write(line)
         code = process.wait()
     if code != 0:
