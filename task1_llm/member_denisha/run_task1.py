@@ -45,7 +45,7 @@ def main() -> None:
         process = subprocess.Popen(command, cwd=MEMBER_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         assert process.stdout is not None
         for line in process.stdout:
-            print(line, end="")
+            print(line, end="", flush=True)
             log.write(line)
         code = process.wait()
     if code != 0:
