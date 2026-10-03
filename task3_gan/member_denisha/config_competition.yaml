@@ -16,6 +16,7 @@ random_flip: true
 replay_buffer_size: 50
 gradient_clip_norm: 5.0
 log_interval_batches: 100
+checkpoint_every_batches: 100
 save_every: 5
 export_limit: 300
 make_kaggle_zip: true

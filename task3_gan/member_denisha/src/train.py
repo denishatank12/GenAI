@@ -110,6 +110,13 @@ def save_tensor_image(tensor: torch.Tensor, path: Path) -> None:
     Image.fromarray(array).save(path, quality=95)
 
 
+def save_checkpoint(state: dict, path: Path) -> None:
+    """Write checkpoints atomically so an interruption cannot corrupt the latest file."""
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(state, temporary)
+    temporary.replace(path)
+
+
 def content_cosine(a, b):
     va, vb = a.mean((2, 3)).flatten(1), b.mean((2, 3)).flatten(1)
     return float(nn.functional.cosine_similarity(va, vb).mean())
@@ -173,6 +180,7 @@ def main():
         history = state.get("history", []); start_epoch = int(state.get("epoch", 0)) + 1; print(json.dumps({"resumed_from": str(latest), "start_epoch": start_epoch}), flush=True)
     samples_per_epoch = int(cfg.get("samples_per_epoch", len(loader_a) * cfg["batch_size"]))
     steps_per_epoch = max(1, math.ceil(samples_per_epoch / cfg["batch_size"]))
+    checkpoint_every_batches = int(cfg.get("checkpoint_every_batches", 0))
     print(json.dumps({"device": str(device), "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU", "domain_A": str(root_a), "domain_B": str(root_b), "image_size": cfg["image_size"], "epochs": cfg["epochs"], "batches_per_epoch": steps_per_epoch, "samples_per_epoch": samples_per_epoch, "amp": cfg.get("amp", True), "precision": cfg.get("precision", "bfloat16")}), flush=True)
     for epoch in range(start_epoch, cfg["epochs"] + 1):
         sums, batches = {"g": 0., "d_a": 0., "d_b": 0., "cycle": 0., "identity": 0.}, 0
@@ -197,12 +205,16 @@ def main():
                 pred_real_b, pred_old_b = D_B(real_b), D_B(fake_b_replay); loss_db = .5 * (adv(pred_real_b, torch.ones_like(pred_real_b)) + adv(pred_old_b, torch.zeros_like(pred_old_b)))
             scaler.scale(loss_db).backward(); scaler.step(opt_db); scaler.update()
             sums["g"] += loss_g.item(); sums["d_a"] += loss_da.item(); sums["d_b"] += loss_db.item(); sums["cycle"] += (cycle(rec_a, real_a) + cycle(rec_b, real_b)).item(); sums["identity"] += (identity(id_a, real_a) + identity(id_b, real_b)).item(); batches += 1; images_seen += int(real_a.size(0) + real_b.size(0))
-            if batch_index % cfg.get("log_interval_batches", 250) == 0: print(json.dumps({"epoch": epoch, "batch": batch_index, "batches_per_epoch": len(loader_a), "g_loss": loss_g.item(), "lr": opt_g.param_groups[0]["lr"]}), flush=True)
+            if checkpoint_every_batches > 0 and batch_index % checkpoint_every_batches == 0:
+                mid_epoch_state = {"G_AB": G_AB.state_dict(), "G_BA": G_BA.state_dict(), "D_A": D_A.state_dict(), "D_B": D_B.state_dict(), "opt_g": opt_g.state_dict(), "opt_da": opt_da.state_dict(), "opt_db": opt_db.state_dict(), "schedulers": [scheduler.state_dict() for scheduler in schedulers], "epoch": epoch - 1, "config": cfg, "history": history}
+                save_checkpoint(mid_epoch_state, latest)
+                print(json.dumps({"checkpoint": str(latest), "epoch": epoch, "batch": batch_index}), flush=True)
+            if batch_index % cfg.get("log_interval_batches", 250) == 0: print(json.dumps({"epoch": epoch, "batch": batch_index, "batches_per_epoch": steps_per_epoch, "g_loss": loss_g.item(), "lr": opt_g.param_groups[0]["lr"]}), flush=True)
         for scheduler in schedulers: scheduler.step()
         row = {"epoch": epoch, **{key: value / max(1, batches) for key, value in sums.items()}, "lr": opt_g.param_groups[0]["lr"], "elapsed_seconds": time.time() - start}; history.append(row); (out / "history.json").write_text(json.dumps(history, indent=2)); print(json.dumps(row), flush=True)
         checkpoint = {"G_AB": G_AB.state_dict(), "G_BA": G_BA.state_dict(), "D_A": D_A.state_dict(), "D_B": D_B.state_dict(), "opt_g": opt_g.state_dict(), "opt_da": opt_da.state_dict(), "opt_db": opt_db.state_dict(), "schedulers": [scheduler.state_dict() for scheduler in schedulers], "epoch": epoch, "config": cfg, "history": history}
-        torch.save(checkpoint, latest)
-        if epoch == 1 or epoch % cfg["save_every"] == 0 or epoch == cfg["epochs"]: torch.save(checkpoint, ckpt / f"cyclegan_epoch_{epoch:03d}.pt")
+        save_checkpoint(checkpoint, latest)
+        if epoch == 1 or epoch % cfg["save_every"] == 0 or epoch == cfg["epochs"]: save_checkpoint(checkpoint, ckpt / f"cyclegan_epoch_{epoch:03d}.pt")
     cycle_metrics, audit_rows = export_predictions(G_AB, G_BA, root_a, root_b, cfg, device, out); elapsed = time.time() - start; metrics = {**cycle_metrics, "generator_gradient_norm_mean": float(np.mean(grad_norms)), "generator_gradient_norm_max": float(np.max(grad_norms)), "gradient_nan_count": nan_count, "parameter_count_generators": sum(p.numel() for p in list(G_AB.parameters()) + list(G_BA.parameters())), "parameter_count_discriminators": sum(p.numel() for p in list(D_A.parameters()) + list(D_B.parameters())), "training_time_seconds": elapsed, "images_per_second": images_seen / max(elapsed, 1e-9), "peak_memory_mb": (torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else 0.0), "device": str(device), "fid_kid_precision_recall": "run evaluate_metrics.py for both directions", "lpips": "run evaluate_lpips.py for both reconstruction folders", "kaggle_submission": str(out / cfg.get("submission_zip", "images.zip")), "human_audit": "complete human_audit.csv"}; (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
     with (out / "human_audit.csv").open("w", newline="") as stream: writer = csv.DictWriter(stream, fieldnames=audit_rows[0].keys() if audit_rows else ["sample_id"]); writer.writeheader(); writer.writerows(audit_rows)
     print(json.dumps(metrics, indent=2))
