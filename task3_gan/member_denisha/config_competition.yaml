@@ -3,8 +3,8 @@ data_root: ../data
 image_size: 256
 batch_size: 4
 samples_per_epoch: 2000
-epochs: 100
-decay_start_epoch: 50
+epochs: 60
+decay_start_epoch: 30
 learning_rate: 0.0002
 beta1: 0.5
 beta2: 0.999
