@@ -90,7 +90,16 @@ def main() -> None:
     parser.add_argument("--smoke-only", action="store_true")
     parser.add_argument("--fresh", action="store_true", help="refuse to resume and require an empty checkpoint folder")
     args = parser.parse_args()
-    config = args.config if args.config.is_absolute() else REPO_ROOT / args.config
+    if args.config.is_absolute():
+        config = args.config
+    else:
+        # Commands are normally launched with cwd=MEMBER_DIR.  Prefer that
+        # location, while retaining compatibility with repo-root invocations.
+        config = MEMBER_DIR / args.config
+        if not config.exists():
+            config = REPO_ROOT / args.config
+    if not config.is_file():
+        raise SystemExit(f"Config file not found: {config}")
     checkpoint_dir = args.checkpoint_dir if args.checkpoint_dir.is_absolute() else REPO_ROOT / args.checkpoint_dir
     if args.dataset_zip:
         extract_dataset(args.dataset_zip.expanduser().resolve())
