@@ -86,6 +86,7 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=CONFIG)
     parser.add_argument("--dataset-zip", type=Path, help="Course-provided ZIP containing monet_jpg/ and photo_jpg/")
     parser.add_argument("--checkpoint-dir", type=Path, default=CHECKPOINT_DIR)
+    parser.add_argument("--require-gpu", action="store_true", help="stop instead of silently falling back to CPU")
     parser.add_argument("--smoke-only", action="store_true")
     parser.add_argument("--fresh", action="store_true", help="refuse to resume and require an empty checkpoint folder")
     args = parser.parse_args()
@@ -101,6 +102,11 @@ def main() -> None:
     if args.smoke_only:
         print("Smoke test passed; full training was intentionally skipped.")
         return
+    if args.require_gpu:
+        import torch
+        if not torch.cuda.is_available():
+            raise SystemExit("CUDA GPU is unavailable; full training was refused. Select the correct NVIDIA GPU/interpreter first.")
+        print(f"CUDA GPU confirmed: {torch.cuda.get_device_name(0)}", flush=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     train_command = [
         sys.executable, "-u", "src/train.py", "--config", str(config),
