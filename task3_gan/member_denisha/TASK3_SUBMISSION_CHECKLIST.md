@@ -25,7 +25,7 @@ python task3_gan/member_denisha/run_task3.py \
   --require-gpu
 ```
 
-The current competition config is 100 epochs, batch size 4, 2,000 samples per epoch, and decay beginning at epoch 50.
+The final competition config is 60 epochs, batch size 4, 2,000 samples per epoch, and decay beginning at epoch 30.
 
 ## Manual requirements after training
 
