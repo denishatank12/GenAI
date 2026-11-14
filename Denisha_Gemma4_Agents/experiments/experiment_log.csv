@@ -1,0 +1,4 @@
+variant,model,change,local_tasks,local_pass_rate,kaggle_score,runtime_seconds,tool_calls,gpu,lesson
+baseline,,,,,,,,,
+agent_1_tool_policy,gemma-4-31b-it-qat-w4a16-ct,source-first tool policy,,,,RTX 4090,
+agent_2_integrated,gemma-4-31b-it-qat-w4a16-ct,planner plus analyzer and test repair,,,,RTX 4090,

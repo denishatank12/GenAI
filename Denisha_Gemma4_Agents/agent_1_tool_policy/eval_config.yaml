@@ -1,0 +1,2 @@
+per_task_timeout_seconds: 240
+max_total_minutes: 720
