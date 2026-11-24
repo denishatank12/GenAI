@@ -24,6 +24,13 @@ def check_variant(path: Path):
     root=path/'agent.yaml'; data=yaml.load(root.read_text(), Loader=KaggleLoader)
     assert data['model']==MODEL, f'{path}: wrong model'
     assert data.get('name'), f'{path}: missing name'
+    adapters = {p.name for p in (path / 'adapters').iterdir()} if (path / 'adapters').is_dir() else set()
+    if data.get('adapter'):
+        assert data['adapter'] in adapters, f'{path}: missing root adapter {data["adapter"]}'
+    for adapter_name in adapters:
+        adapter_dir = path / 'adapters' / adapter_name
+        assert (adapter_dir / 'adapter_config.json').exists(), f'{adapter_dir}: missing adapter_config.json'
+        assert (adapter_dir / 'adapter_model.safetensors').exists(), f'{adapter_dir}: missing adapter_model.safetensors'
     for item in data.get('tools',[]):
         if isinstance(item,str): assert item in ALLOWED, f'{path}: unsupported tool {item}'
         else: assert 'agent_tool' in item

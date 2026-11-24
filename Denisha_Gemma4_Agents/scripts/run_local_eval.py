@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,20 @@ from pathlib import Path
 def require_path(label: str, path: Path) -> None:
     if not path.exists():
         raise SystemExit(f"Missing {label}: {path}")
+
+
+def validate_submission(path: Path) -> None:
+    require_path("submission root", path)
+    root = path / "agent.yaml"
+    require_path("agent.yaml", root)
+    for relative in ("eval_config.yaml", "configs", "prompts", "sub_agents"):
+        require_path(relative, path / relative)
+    for adapter_dir in (path / "adapters").glob("*") if (path / "adapters").is_dir() else []:
+        if not adapter_dir.is_dir():
+            continue
+        require_path(f"{adapter_dir.name}/adapter_config.json", adapter_dir / "adapter_config.json")
+        require_path(f"{adapter_dir.name}/adapter_model.safetensors", adapter_dir / "adapter_model.safetensors")
+        json.loads((adapter_dir / "adapter_config.json").read_text())
 
 
 def main() -> int:
@@ -31,14 +46,24 @@ def main() -> int:
     ):
         require_path(label, path)
 
+    validate_submission(args.submission_dir)
     root_configs = [p for p in args.submission_dir.glob("*.y*ml") if p.name in {"agent.yaml", "agent.yml", "root_agent.yaml", "root_agent.yml"}]
     if len(root_configs) != 1:
         raise SystemExit(f"Submission must contain exactly one root agent config; found {root_configs}")
 
-    if shutil.which("nvidia-smi"):
-        subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"], check=False)
-    else:
-        print("WARNING: nvidia-smi was not found; the harness may run CPU-only.")
+    if not shutil.which("nvidia-smi"):
+        raise SystemExit("nvidia-smi was not found. Connect the RTX 4090 driver before running GPU evaluation.")
+    gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"], text=True, capture_output=True, check=False)
+    if gpu.returncode != 0 or not gpu.stdout.strip():
+        raise SystemExit("nvidia-smi could not see a GPU. Fix the NVIDIA driver/runtime first.")
+    print(gpu.stdout.strip())
+
+    if args.sandbox == "docker":
+        if not shutil.which("docker"):
+            raise SystemExit("Docker is required for --sandbox docker but was not found on PATH.")
+        docker = subprocess.run(["docker", "info"], text=True, capture_output=True, check=False)
+        if docker.returncode != 0:
+            raise SystemExit("Docker is installed but its daemon is not running. Start Docker Desktop and retry.")
 
     harness = shutil.which("swegemma")
     if harness is None:
